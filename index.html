@@ -219,7 +219,6 @@ function hwId(t,lng){
   if(/O-?5\b|Gebze.{0,3}Orhangazi|İstanbul.{0,3}İzmir Oto/i.test(t))return 'o5';
   if(/O-?4\b|Anadolu Otoyolu/i.test(t))return 'o4';
   if(/O-?3\b|Avrupa Otoyolu/i.test(t))return 'o3';
-  if(/Ücretli yol|Toll road/i.test(t)&&!/Kısmi|Partial/i.test(t))return 'x';
   return null;}
 function hwOf(r){const km={};let cur=null;
   for(const leg of (r.legs||[]))for(const st of (leg.steps||[])){
@@ -237,9 +236,9 @@ function hwToll(km){const parts=[];let sum=0;
 // eski kayıtlara gece tarifesini ekle (00:00–04:59 arası yarı fiyat)
 S.tp.forEach(t=>{if(/^Avrasya/.test(t.name)&&t.night==null){t.night=Math.round(t.price/2);t.name='Avrasya Tüneli';}});
 // ad ile eşleştirme: rota talimatlarında geçidin adı geçiyorsa konum tutmasa da sayılır
-const TPRE=[[/^15 Temmuz/,'15 Temmuz|Boğaziçi Köprüsü'],[/^FSM/,'Fatih Sultan Mehmet|FSM Köprüsü'],[/^Yavuz/,'Yavuz Sultan Selim'],
+const TPRE=[[/^15 Temmuz/,'15 Temmuz Şehitler K[öo]pr|Boğaziçi K[öo]pr'],[/^FSM/,'Fatih Sultan Mehmet K[öo]pr|FSM K[öo]pr'],[/^Yavuz/,'Yavuz Sultan Selim K[öo]pr'],
   [/^Avrasya/,'Avrasya T[üu]nel'],[/^Osmangazi/,'Osmangazi K[öo]pr'],[/^1915/,'1915 Çanakkale|Çanakkale K[öo]pr']];
-S.tp.forEach(t=>{if(t.re==null){const m=TPRE.find(([n])=>n.test(t.name));if(m)t.re=m[1];}if(/^Avrasya/.test(t.name)&&t.r<1200)t.r=1200;});
+S.tp.forEach(t=>{const m=TPRE.find(([n])=>n.test(t.name));if(m&&(t.re==null||!/pr\b|pr\||nel/.test(t.re)||/^15 Temmuz\||^Fatih Sultan Mehmet\||^Yavuz Sultan Selim$/.test(t.re)))t.re=m[1];if(/^Avrasya/.test(t.name)&&t.r<1200)t.r=1200;});
 const tpPrice=t=>(t.night!=null&&new Date().getHours()<5)?+t.night:+t.price;
 // Rota tablodaki noktalardan geçiyor mu? Yön kısıtı varsa rotanın o noktadaki yönüne bakılır.
 function tableToll(g,txt){const hit=[];let sum=0;
