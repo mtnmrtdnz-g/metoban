@@ -216,42 +216,54 @@ if(!S.hw)S.hw=[
  {id:'o5',name:'İstanbul–İzmir O-5 (köprü hariç)',rate:4.3,min:0,max:1725},
  {id:'x',name:'Diğer ücretli yol',rate:1.5,min:0,max:9999}];
 // Rotanın adımlarından hangi ücretli otoyolda kaç km gidildiğini çıkarır (yol adı adım talimatından okunur)
-function hwId(t,lng){
-  if(/O-?7\b|Kuzey Marmara|Kuzey Çevre/i.test(t))return lng<28.85?'kmoA':lng<29.35?'kc':'kmoB';
-  if(/O-?5\b|Gebze.{0,3}Orhangazi|İstanbul.{0,3}İzmir Oto/i.test(t))return 'o5';
-  if(/O-?4\b|Anadolu Otoyolu/i.test(t))return 'o4';
-  if(/O-?3\b|Avrupa Otoyolu/i.test(t))return 'o3';
+// Gerçek Google talimatları tabela listesi içerir ("A/B/C yönündeki çıkışa girin"); yalnızca yol kodu ve konuma güvenilir.
+//  O-7: tamamı ücretli. O-4: Çamlıca gişelerinin doğusu (boylam > 29.12). O-3: Mahmutbey gişelerinin batısı (boylam < 28.80).
+//  O-5: yalnızca körfezin güneyi (enlem < 40.80). Diğer her şey (O-1, O-2, D100, 'İstanbul-İzmir Otoyolu' tabelası) ücretsiz sayılır.
+function hwId(t,lat,lng){
+  if(/\bO-?7\b|Kuzey Marmara Otoyolu/i.test(t))return lng<28.85?'kmoA':lng<29.35?'kc':'kmoB';
+  if(/\bO-?5\b/i.test(t)&&lat<40.80)return 'o5';
+  if(/\bO-?4\b/i.test(t)&&lng>29.12&&!/\bO-?[12]\b/i.test(t))return 'o4';
+  if(/\bO-?3\b/i.test(t)&&lng<28.80&&!/\bO-?[12]\b/i.test(t))return 'o3';
   return null;}
 function hwOf(r){const km={};let cur=null;
   for(const leg of (r.legs||[]))for(const st of (leg.steps||[])){
     const t=(st.navigationInstruction&&st.navigationInstruction.instructions)||'',d=st.distanceMeters||0,sec=dur(st.staticDuration);
-    const pl=decodePoly(st.polyline&&st.polyline.encodedPolyline||''),lng=pl.length?pl[Math.floor(pl.length/2)][1]:0;
-    let id=hwId(t,lng);
-    if(!id&&cur){const other=/\b(O-?\d+|D\s?\d{3}|E\s?\d{2,3})\b/i.test(t),fast=sec>0&&d/sec>22;   // 22 m/s ≈ 80 km/h
-      if(!other&&fast)id=(cur==='kmoA'||cur==='kc'||cur==='kmoB')?hwId('O-7',lng):cur;}
+    const pl=decodePoly(st.polyline&&st.polyline.encodedPolyline||''),mid=pl.length?pl[Math.floor(pl.length/2)]:[0,0];
+    let id=hwId(t,mid[0],mid[1]);
+    if(!id&&cur){const other=/\b(O-?\d+|D\s?\d{3})\b|çıkış/i.test(t),fast=sec>0&&d/sec>22;   // 22 m/s ≈ 80 km/h
+      if(!other&&fast)id=hwId(cur==='o5'?'O-5':cur==='o4'?'O-4':cur==='o3'?'O-3':'O-7',mid[0],mid[1]);}
     cur=id;if(id)km[id]=(km[id]||0)+d/1000;}
   return km;}
 function hwToll(km){const parts=[];let sum=0;
-  for(const h of S.hw){const k=km[h.id];if(!k||k<0.5)continue;const v=Math.round(Math.min(h.max,Math.max(h.min,k*h.rate)));
-    parts.push({name:h.name,km:k,rate:h.rate,v,cl:k*h.rate<h.min?'en az':k*h.rate>h.max?'en çok':''});sum+=v;}
+  for(const h of S.hw){const k=km[h.id];if(!k||k<0.5)continue;const v=Math.round(Math.min(h.max,k>=5?Math.max(h.min,k*h.rate):k*h.rate));
+    parts.push({name:h.name,km:k,rate:h.rate,v,cl:k>=5&&k*h.rate<h.min?'en az':k*h.rate>h.max?'en çok':''});sum+=v;}
   return {sum,parts};}
 // eski kayıtlara gece tarifesini ekle (00:00–04:59 arası yarı fiyat)
 S.tp.forEach(t=>{if(/^Avrasya/.test(t.name)&&t.night==null){t.night=Math.round(t.price/2);t.name='Avrasya Tüneli';}});
-// ad ile eşleştirme: rota talimatlarında geçidin adı geçiyorsa konum tutmasa da sayılır
-const TPRE=[[/^15 Temmuz/,'15 Temmuz Şehitler K[öo]pr|Boğaziçi K[öo]pr'],[/^FSM/,'Fatih Sultan Mehmet K[öo]pr|FSM K[öo]pr'],[/^Yavuz/,'Yavuz Sultan Selim K[öo]pr'],
-  [/^Avrasya/,'Avrasya T[üu]nel'],[/^Osmangazi/,'Osmangazi K[öo]pr'],[/^1915/,'1915 Çanakkale|Çanakkale K[öo]pr']];
-S.tp.forEach(t=>{const m=TPRE.find(([n])=>n.test(t.name));if(m&&(t.re==null||!/pr\b|pr\||nel/.test(t.re)||/^15 Temmuz\||^Fatih Sultan Mehmet\||^Yavuz Sultan Selim$/.test(t.re)))t.re=m[1];if(/^Avrasya/.test(t.name)&&t.r<1200)t.r=1200;});
+// Geçit çizgisi: köprü/tünelin altındaki suyu kesen kısa bir çizgi. Rota bu çizgiyi keserse o geçitten geçiyordur.
+// (Tabela metinleri güvenilmez: 'Avrasya Tüneli yönü' yazan çıkış tünele girmeyebilir; bu yüzden adla eşleştirme yok.)
+const GATES=[[/^15 Temmuz/,[41.042,29.028,41.048,29.039],300],[/^FSM/,[41.087,29.0615,41.096,29.0615],300],
+  [/^Yavuz/,[41.195,29.1115,41.212,29.1115],500],[/^Avrasya/,[40.960,29.000,41.022,29.000],0],
+  [/^Osmangazi/,[40.755,29.495,40.755,29.535],500],[/^1915/,[40.330,26.620,40.350,26.650],500]];
+S.tp.forEach(t=>{const m=GATES.find(([n])=>n.test(t.name));if(m){t.gate=m[1];t.r=m[2];}delete t.re;});
+function crossIdx(g,gate){const [ax,ay]=proj(gate[0],gate[1]),[bx,by]=proj(gate[2],gate[3]),P=g.pts,
+    side=(px,py,qx,qy,rx,ry)=>(qx-px)*(ry-py)-(qy-py)*(rx-px);
+  for(let i=0;i<P.length-1;i++){const p=P[i],q=P[i+1];
+    if(Math.min(p.x,q.x)>Math.max(ax,bx)||Math.max(p.x,q.x)<Math.min(ax,bx)||Math.min(p.y,q.y)>Math.max(ay,by)||Math.max(p.y,q.y)<Math.min(ay,by))continue;
+    if(side(ax,ay,bx,by,p.x,p.y)*side(ax,ay,bx,by,q.x,q.y)<=0&&side(p.x,p.y,q.x,q.y,ax,ay)*side(p.x,p.y,q.x,q.y,bx,by)<=0)return i;}
+  return -1;}
 const tpPrice=t=>(t.night!=null&&new Date().getHours()<5)?+t.night:+t.price;
 // Rota tablodaki noktalardan geçiyor mu? Yön kısıtı varsa rotanın o noktadaki yönüne bakılır.
-function tableToll(g,txt){const hit=[];let sum=0;
-  for(const t of S.tp){if(!t.on||!(tpPrice(t)>0))continue;const [x,y]=proj(t.lat,t.lng),n=nearestAny(g,x,y);
-    let byName=false;if(t.re&&txt){try{byName=new RegExp(t.re,'i').test(txt);}catch(e){}}
-    if(n.d>(t.r||150)&&!byName)continue;
-    if(t.dir!=null){const a=g.pts[Math.max(0,n.idx-5)],b=g.pts[Math.min(g.pts.length-1,n.idx+5)];
+function tableToll(g){const hit=[];let sum=0;
+  for(const t of S.tp){if(!t.on||!(tpPrice(t)>0))continue;
+    let idx=t.gate?crossIdx(g,t.gate):-1;
+    if(idx<0&&t.r>0){const [x,y]=proj(t.lat,t.lng),n=nearestAny(g,x,y);if(n.d<=t.r)idx=n.idx;}
+    if(idx<0)continue;
+    if(t.dir!=null){const a=g.pts[Math.max(0,idx-5)],b=g.pts[Math.min(g.pts.length-1,idx+5)];
       const brg=Math.atan2(b.x-a.x,b.y-a.y),want=t.dir*Math.PI/180;if(Math.cos(brg-want)<=0)continue;}
     hit.push(Object.assign({},t,{price:tpPrice(t),name:t.name+(t.night!=null?(new Date().getHours()<5?' (gece)':' (gündüz)'):'')}));sum+=tpPrice(t);}
   return {sum,hit};}
-function finalToll(gt,g,km,txt){const m=tableToll(g,txt),w=hwToll(km||{});
+function finalToll(gt,g,km){const m=tableToll(g),w=hwToll(km||{});
   // Kendi tablomuzda bir köprü/tünel eşleştiyse o esas alınır; yoksa Google fiyat verdiyse o; o da yoksa otoyol tahmini
   if(!m.sum&&gt.known&&gt.price>0)return Object.assign({src:'Google'},gt);
   if(m.sum+w.sum>0)return {has:true,known:true,price:m.sum+w.sum,cur:'TRY',src:w.sum?'tahmin':'tablo',hit:m.hit,hw:w.parts,more:gt.has&&!gt.known&&!w.sum};
@@ -543,7 +555,7 @@ async function run(){
   R=kept.filter((x,i)=>i===0||!x.auto||!x.br.some(b=>b.ai.len<150&&b.bi.len>400));
   // sadeleştir: en hızlıdan %30'dan fazla yavaş olanları gizle, en fazla 5 rota göster.
   // Kendi kaydettiğin koridorlar ve en ucuz rota her zaman kalır.
-  const nAll=R.length;R.forEach(x=>{x.toll=finalToll(x.gtoll,x.g,x.hw,x.txt);});
+  const nAll=R.length;R.forEach(x=>{x.toll=finalToll(x.gtoll,x.g,x.hw);});
   const price=x=>x.toll.known?x.toll.price:Infinity,minP=Math.min(...R.map(price));
   const cheapest=R.find(x=>price(x)===minP),mine=x=>x.tags.some(t=>S.vias.some(v=>v.name===t));
   let keep=R.filter(x=>x===R[0]||x===cheapest||mine(x)||x.eff<=1.3*R[0].eff);
@@ -575,7 +587,7 @@ function navUrl(x,i){
 }
 function render(){
   const A=R[0],thr=S.thr;
-  R.forEach(x=>{x.toll=finalToll(x.gtoll,x.g,x.hw,x.txt);x.cost=x.toll.known?x.toll.price+(x.eff/60)*thr:NaN;x.windy=x.wind.perKm>S.wmax;});
+  R.forEach(x=>{x.toll=finalToll(x.gtoll,x.g,x.hw);x.cost=x.toll.known?x.toll.price+(x.eff/60)*thr:NaN;x.windy=x.wind.perKm>S.wmax;});
   let pool=R.filter(x=>!isNaN(x.cost)&&!x.windy);if(!pool.length)pool=R.filter(x=>!isNaN(x.cost));
   const rec=pool.length?pool.reduce((a,b)=>b.cost<a.cost?b:a):null;
   if(sel==null||sel>=R.length)sel=rec?R.indexOf(rec):0;
