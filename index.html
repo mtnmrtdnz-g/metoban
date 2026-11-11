@@ -198,10 +198,10 @@ const S={key:store.get('key',''),thr:store.get('thr',10),emis:store.get('emis','
          from:store.get('from',''),to:store.get('to',''),wmax:store.get('wmax',2),auton:store.get('auton',2),
          tolls:store.get('tolls',1),lim_r:store.get('lim_r',900),lim_m:store.get('lim_m',9000),lim_p:store.get('lim_p',9000),
          fromP:store.get('fromP',null),toP:store.get('toP',null),tp:store.get('tp',null),hw:store.get('hw',null),navgo:store.get('navgo',0),favs:store.get('favs',[]),autorun:store.get('autorun',1),voice:store.get('voice',1)};
-// Otomobil (1. sınıf), 1 Temmuz 2026 tarifesi. dir: null=her yön, 90=yalnız doğuya (Avrupa→Anadolu), 270=yalnız batıya
+// Otomobil (1. sınıf), 1 Temmuz 2026 tarifesi. dir: null=her yön, 90=yalnız doğuya (Avrupa→Anadolu), 270=yalnız batıya (Anadolu→Avrupa)
 if(!S.tp)S.tp=[
- {name:'15 Temmuz Köprüsü',lat:41.0453,lng:29.0343,price:59,dir:90,r:300,on:true},
- {name:'FSM Köprüsü',lat:41.0914,lng:29.0613,price:59,dir:90,r:300,on:true},
+ {name:'15 Temmuz Köprüsü',lat:41.0453,lng:29.0343,price:59,dir:270,v:2,r:300,on:true},
+ {name:'FSM Köprüsü',lat:41.0914,lng:29.0613,price:59,dir:270,v:2,r:300,on:true},
  {name:'Yavuz Sultan Selim Köprüsü',lat:41.2028,lng:29.1117,price:110,dir:null,r:300,on:true},
  {name:'Avrasya Tüneli',lat:40.9985,lng:29.0000,price:330,night:165,dir:null,r:700,on:true},
  {name:'Osmangazi Köprüsü',lat:40.7547,lng:29.5153,price:1170,dir:null,r:300,on:true},
@@ -245,6 +245,8 @@ S.tp.forEach(t=>{if(/^Avrasya/.test(t.name)&&t.night==null){t.night=Math.round(t
 const GATES=[[/^15 Temmuz/,[41.042,29.028,41.048,29.039],300],[/^FSM/,[41.087,29.0615,41.096,29.0615],300],
   [/^Yavuz/,[41.195,29.1115,41.212,29.1115],500],[/^Avrasya/,[40.960,29.000,41.022,29.000],0],
   [/^Osmangazi/,[40.755,29.495,40.755,29.535],500],[/^1915/,[40.330,26.620,40.350,26.650],500]];
+// 15 Temmuz ve FSM: ücret Anadolu→Avrupa yönünde (eski kayıtlarda ters yazılmıştı, bir kez düzeltilir)
+S.tp.forEach(t=>{if(/^(15 Temmuz|FSM)/.test(t.name)&&t.v!==2){if(t.dir===90)t.dir=270;t.v=2;}});
 S.tp.forEach(t=>{const m=GATES.find(([n])=>n.test(t.name));if(m){t.gate=m[1];t.r=m[2];}delete t.re;});
 function crossIdx(g,gate){const [ax,ay]=proj(gate[0],gate[1]),[bx,by]=proj(gate[2],gate[3]),P=g.pts,
     side=(px,py,qx,qy,rx,ry)=>(qx-px)*(ry-py)-(qy-py)*(rx-px);
