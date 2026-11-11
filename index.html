@@ -75,6 +75,7 @@ details{margin-top:8px}summary{color:var(--acc);cursor:pointer;font-size:14px}
   <select id="emis"><option value="GASOLINE">Benzin</option><option value="DIESEL">Dizel</option><option value="HYBRID">Hibrit</option><option value="ELECTRIC">Elektrik</option></select>
   <label>Açılışta son hedefe otomatik arama / öneriyi sesli oku</label>
   <div class="row"><select id="autorun"><option value="1">Otomatik arama açık</option><option value="0">Otomatik arama kapalı</option></select>
+    <select id="navgo"><option value="0">Maps: önce rotayı göster</option><option value="1">Maps: doğrudan başlat</option></select>
     <select id="voice"><option value="1">Ses açık</option><option value="0">Ses kapalı</option></select></div>
   <label>Favori hedefler</label>
   <div id="favlist"></div>
@@ -194,7 +195,7 @@ const store={get(k,d){try{const v=localStorage.getItem('rk_'+k);return v==null?d
 const S={key:store.get('key',''),thr:store.get('thr',10),emis:store.get('emis','GASOLINE'),vias:store.get('vias',[]),
          from:store.get('from',''),to:store.get('to',''),wmax:store.get('wmax',2),auton:store.get('auton',2),
          tolls:store.get('tolls',1),lim_r:store.get('lim_r',900),lim_m:store.get('lim_m',9000),lim_p:store.get('lim_p',9000),
-         fromP:store.get('fromP',null),toP:store.get('toP',null),tp:store.get('tp',null),hw:store.get('hw',null),favs:store.get('favs',[]),autorun:store.get('autorun',1),voice:store.get('voice',1)};
+         fromP:store.get('fromP',null),toP:store.get('toP',null),tp:store.get('tp',null),hw:store.get('hw',null),navgo:store.get('navgo',0),favs:store.get('favs',[]),autorun:store.get('autorun',1),voice:store.get('voice',1)};
 // Otomobil (1. sınıf), 1 Temmuz 2026 tarifesi. dir: null=her yön, 90=yalnız doğuya (Avrupa→Anadolu), 270=yalnız batıya
 if(!S.tp)S.tp=[
  {name:'15 Temmuz Köprüsü',lat:41.0453,lng:29.0343,price:59,dir:90,r:300,on:true},
@@ -253,10 +254,10 @@ function spend(kind,n){const u=usage(),F={r:['r','lim_r'],m:['mp','lim_m'],p:['p
   if(u[F[0]]+n>S[F[1]])return false;u[F[0]]+=n;store.set('usage',u);renderUsage();return true;}
 let LOG=store.get('log',[])||[];
 const COLORS=['#5aa9ff','#f5b942','#c77dff','#3ecf8e','#ff8fab','#7ee8fa','#ffd166','#a0a0ff'];
-let map=null,overlays=[],viaMarkers=[],addMode=false,R=[],sel=null,spoken=true,autoDone=false,forceAuto=false;
+let map=null,overlays=[],viaMarkers=[],addMode=false,R=[],DEF=null,sel=null,spoken=true,autoDone=false,forceAuto=false;
 
 function msg(t,err){$('#msg').textContent=t||'';$('#msg').className=err?'err':'';}
-function save(){['key','thr','emis','vias','wmax','auton','tolls','lim_r','lim_m','lim_p','fromP','toP','tp','hw','favs','autorun','voice'].forEach(k=>store.set(k,S[k]));}
+function save(){['key','thr','emis','vias','wmax','auton','tolls','lim_r','lim_m','lim_p','fromP','toP','tp','hw','navgo','favs','autorun','voice'].forEach(k=>store.set(k,S[k]));}
 const fmtMin=s=>(s/60).toFixed(1)+' dk', fmtKm=m=>(m/1000).toFixed(1)+' km';
 const fmtTL=v=>isNaN(v)?'? ₺':(Math.round(v*100)/100).toLocaleString('tr-TR')+' ₺';
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -281,7 +282,7 @@ function renderSettings(){
     <button data-i="${i}" class="tdel">✕</button></div>`).join('')||'<div class="hint">Henüz yok.</div>';
   $('#hws').innerHTML=S.hw.map((w,i)=>`<div class="via"><span class="hint" style="flex:3">${esc(w.name)}</span>
     <input type="number" step="0.05" data-i="${i}" class="hrate" value="${w.rate}" style="max-width:80px"></div>`).join('');
-  $('#autorun').value=String(S.autorun);$('#voice').value=String(S.voice);
+  $('#navgo').value=String(S.navgo);$('#autorun').value=String(S.autorun);$('#voice').value=String(S.voice);
   $('#favlist').innerHTML=S.favs.map((f,i)=>`<div class="via"><input type="text" data-i="${i}" class="fname" value="${esc(f.name)}">
     <span class="hint">${esc(f.p.text).slice(0,40)}</span><button data-i="${i}" class="fdel">✕</button></div>`).join('')||'<div class="hint">Henüz yok. Bir hedef seçip üstteki ☆ Kaydet düğmesine bas.</div>';
   renderFavs();drawViaMarkers();renderLogs();
@@ -296,6 +297,7 @@ $('#favlist').onchange=e=>{if(e.target.classList.contains('fname')){S.favs[+e.ta
 $('#favlist').onclick=e=>{if(e.target.classList.contains('fdel')){S.favs.splice(+e.target.dataset.i,1);save();renderSettings();}};
 $('#hws').onchange=e=>{if(e.target.classList.contains('hrate')){S.hw[+e.target.dataset.i].rate=parseFloat(e.target.value)||0;save();if(R.length)render();}};
 $('#autorun').onchange=e=>{S.autorun=+e.target.value;save();};
+$('#navgo').onchange=e=>{S.navgo=+e.target.value;save();if(R.length)render();};
 $('#voice').onchange=e=>{S.voice=+e.target.value;save();if(!S.voice&&window.speechSynthesis)speechSynthesis.cancel();};
 function speak(t){if(!S.voice||!window.speechSynthesis||!window.SpeechSynthesisUtterance)return;
   try{const u=new SpeechSynthesisUtterance(t);u.lang='tr-TR';speechSynthesis.cancel();speechSynthesis.speak(u);}catch(e){}}
@@ -495,7 +497,7 @@ async function run(){
   if(!spend('r',jobs.length)){msg(`Aylık Routes limiti doldu: ${u0.r} kullanıldı, bu arama ${need} istek ister, limit ${S.lim_r}. Arama yapılmadı.`,1);return;}
   const res=await Promise.allSettled(jobs.map(j=>compute(o,d,j.mod,j.alt,j.via)));
   const raw=[],errs=[];
-  res.forEach((r,i)=>{if(r.status==='fulfilled')r.value.forEach(x=>raw.push({r:x,tags:[jobs[i].tag],auto:false,via:jobs[i].via||null}));else errs.push(jobs[i].tag+': '+r.reason.message);});
+  res.forEach((r,i)=>{if(r.status==='fulfilled')r.value.forEach((x,k)=>raw.push({r:x,tags:[jobs[i].tag],auto:false,via:jobs[i].via||null,def:i===0&&k===0}));else errs.push(jobs[i].tag+': '+r.reason.message);});
   if(!raw.length){msg('Rota alınamadı. '+errs.join(' | '),1);return;}
   const f0=raw.reduce((a,b)=>dur(b.r.duration)<dur(a.r.duration)?b:a);
   const p0=decodePoly(f0.r.polyline.encodedPolyline)[0];setOrigin(p0[0],p0[1]);
@@ -512,8 +514,8 @@ async function run(){
   // birebir aynı çizgiler
   const byPoly=new Map();
   raw.forEach(x=>{const k=x.r.polyline.encodedPolyline,e=byPoly.get(k);
-    if(e){x.tags.forEach(t=>{if(!e.tags.includes(t))e.tags.push(t);});e.auto=e.auto&&x.auto;}else byPoly.set(k,x);});
-  let list=[...byPoly.values()].map(x=>({r:x.r,tags:x.tags,auto:x.auto,via:x.via,dur:dur(x.r.duration),dist:x.r.distanceMeters||0,gtoll:tollOf(x.r),toll:tollOf(x.r),wind:windOf(x.r),hw:hwOf(x.r)}));
+    if(e){x.tags.forEach(t=>{if(!e.tags.includes(t))e.tags.push(t);});e.auto=e.auto&&x.auto;e.def=e.def||x.def;}else byPoly.set(k,x);});
+  let list=[...byPoly.values()].map(x=>({r:x.r,tags:x.tags,auto:x.auto,via:x.via,def:!!x.def,dur:dur(x.r.duration),dist:x.r.distanceMeters||0,gtoll:tollOf(x.r),toll:tollOf(x.r),wind:windOf(x.r),hw:hwOf(x.r)}));
   const minDur=Math.min(...list.map(x=>x.dur));
   // otomatik adayları ele: %25'ten fazla yavaş ya da dolambaçlı
   list=list.filter(x=>!x.auto||(x.dur<=1.25*minDur&&x.wind.perKm<=S.wmax));
@@ -522,7 +524,8 @@ async function run(){
   // geometrik olarak aynı olanları birleştir
   const kept=[];
   for(const x of list){const twin=kept.find(k=>diff(x.g,k.g).length===0&&diff(k.g,x.g).length===0);
-    if(twin){x.tags.forEach(t=>{if(!twin.tags.includes(t))twin.tags.push(t);});twin.auto=twin.auto&&x.auto;}else kept.push(x);}
+    if(twin){x.tags.forEach(t=>{if(!twin.tags.includes(t))twin.tags.push(t);});twin.auto=twin.auto&&x.auto;twin.def=twin.def||x.def;}else kept.push(x);}
+  DEF=kept.find(x=>x.def)||null;
   const A=kept[0];
   kept.forEach((x,i)=>{x.br=i?diff(x.g,A.g).map(br=>({ai:branchInfo(A.g,br.a[0],br.a[1]),bi:branchInfo(x.g,br.b[0],br.b[1])})):[];});
   // otomatik adaylarda "gir-çık" sapmaları ele (aynı noktadan ayrılıp aynı noktaya dönen)
@@ -547,10 +550,16 @@ function navUrl(x,i){
   const part=(name,p)=>{if(!p||p.me)return '';if(p.pid)return '&'+name+'='+enc(p.text)+'&'+name+'_place_id='+enc(p.pid);
     if(p.lat!=null)return '&'+name+'='+enc(p.lat.toFixed(6)+','+p.lng.toFixed(6));return '&'+name+'='+enc(p.text);};
   // başlangıç "Konumum" ise origin gönderilmez; Google Maps telefonun anlık konumunu kullanır
-  let u='https://www.google.com/maps/dir/?api=1&travelmode=driving&dir_action=navigate'+part('origin',P.from)+part('destination',P.to);
-  if(i>0&&x.br.length){const w=x.br.slice().sort((a,b)=>b.bi.len-a.bi.len).slice(0,3).sort((a,b)=>a.bi.mid.d-b.bi.mid.d).map(b=>ll(b.bi.mid));
-    u+='&waypoints='+enc(w.join('|'));}
-  else if(i===0&&x.via&&!x.tags.includes('Google')){const [vx,vy]=proj(x.via.lat,x.via.lng);u+='&waypoints='+enc(ll(x.g.pts[nearestAny(x.g,vx,vy).idx]));}
+  let u='https://www.google.com/maps/dir/?api=1&travelmode=driving'+(S.navgo?'&dir_action=navigate':'')+part('origin',P.from)+part('destination',P.to);
+  // Google Maps kendi varsayılan rotasını çizer. Seçilen rota ondan farklıysa, ayrıldığı kesimlerin
+  // üzerine en fazla 3 ara nokta koyarak Maps'i bu rotaya zorlarız.
+  const w=[];
+  if(DEF&&x!==DEF){const P=x.g.pts,brs=diff(x.g,DEF.g).map(o=>({s:o.b[0],e:o.b[1],len:P[o.b[1]].d-P[o.b[0]].d})).sort((p,q)=>q.len-p.len).slice(0,3);
+    const fr=brs.length===1?(brs[0].len>3000?[[.25,.5,.75]]:[[.5]]):brs.length===2?[[.33,.66],[.5]]:[[.5],[.5],[.5]];
+    brs.forEach((o,k)=>fr[k].forEach(f=>w.push(P[Math.round(o.s+(o.e-o.s)*f)])));w.sort((p,q)=>p.d-q.d);}
+  if(w.length)u+='&waypoints='+enc(w.map(ll).join('|'));
+  else if(!DEF&&x.via){const [vx,vy]=proj(x.via.lat,x.via.lng);u+='&waypoints='+enc(ll(x.g.pts[nearestAny(x.g,vx,vy).idx]));}
+  x.navWp=w.length;
   return u;
 }
 function render(){
