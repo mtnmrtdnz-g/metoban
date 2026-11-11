@@ -201,7 +201,7 @@ if(!S.tp)S.tp=[
  {name:'15 Temmuz Köprüsü',lat:41.0453,lng:29.0343,price:59,dir:90,r:300,on:true},
  {name:'FSM Köprüsü',lat:41.0914,lng:29.0613,price:59,dir:90,r:300,on:true},
  {name:'Yavuz Sultan Selim Köprüsü',lat:41.2028,lng:29.1117,price:110,dir:null,r:300,on:true},
- {name:'Avrasya Tüneli (gündüz)',lat:40.9985,lng:29.0000,price:330,dir:null,r:700,on:true},
+ {name:'Avrasya Tüneli',lat:40.9985,lng:29.0000,price:330,night:165,dir:null,r:700,on:true},
  {name:'Osmangazi Köprüsü',lat:40.7547,lng:29.5153,price:1170,dir:null,r:300,on:true},
  {name:'1915 Çanakkale Köprüsü',lat:40.3394,lng:26.6355,price:1170,dir:null,r:300,on:true}];
 // Otoyol km ücretleri: tam parkur ücreti / yaklaşık uzunluk (1 Temmuz 2026, otomobil). min/max: tarifedeki en düşük ve tam parkur ücreti.
@@ -234,12 +234,15 @@ function hwToll(km){const parts=[];let sum=0;
   for(const h of S.hw){const k=km[h.id];if(!k||k<0.5)continue;const v=Math.round(Math.min(h.max,Math.max(h.min,k*h.rate)));
     parts.push({name:h.name,km:k,rate:h.rate,v,cl:k*h.rate<h.min?'en az':k*h.rate>h.max?'en çok':''});sum+=v;}
   return {sum,parts};}
+// eski kayıtlara gece tarifesini ekle (00:00–04:59 arası yarı fiyat)
+S.tp.forEach(t=>{if(/^Avrasya/.test(t.name)&&t.night==null){t.night=Math.round(t.price/2);t.name='Avrasya Tüneli';}});
+const tpPrice=t=>(t.night!=null&&new Date().getHours()<5)?+t.night:+t.price;
 // Rota tablodaki noktalardan geçiyor mu? Yön kısıtı varsa rotanın o noktadaki yönüne bakılır.
 function tableToll(g){const hit=[];let sum=0;
-  for(const t of S.tp){if(!t.on||!(t.price>0))continue;const [x,y]=proj(t.lat,t.lng),n=nearestAny(g,x,y);if(n.d>(t.r||150))continue;
+  for(const t of S.tp){if(!t.on||!(tpPrice(t)>0))continue;const [x,y]=proj(t.lat,t.lng),n=nearestAny(g,x,y);if(n.d>(t.r||150))continue;
     if(t.dir!=null){const a=g.pts[Math.max(0,n.idx-5)],b=g.pts[Math.min(g.pts.length-1,n.idx+5)];
       const brg=Math.atan2(b.x-a.x,b.y-a.y),want=t.dir*Math.PI/180;if(Math.cos(brg-want)<=0)continue;}
-    hit.push(t);sum+=+t.price;}
+    hit.push(Object.assign({},t,{price:tpPrice(t),name:t.name+(t.night!=null?(new Date().getHours()<5?' (gece)':' (gündüz)'):'')}));sum+=tpPrice(t);}
   return {sum,hit};}
 function finalToll(gt,g,km){if(gt.known&&gt.price>0)return Object.assign({src:'Google'},gt);
   const m=tableToll(g),w=hwToll(km||{});
@@ -275,7 +278,7 @@ function renderSettings(){
   $('#tps').innerHTML=S.tp.map((t,i)=>`<div class="via">
     <input type="checkbox" data-i="${i}" class="ton" ${t.on?'checked':''}>
     <input type="text" data-i="${i}" class="tname" value="${esc(t.name)}">
-    <input type="number" data-i="${i}" class="tprice" value="${t.price}" style="max-width:80px">
+    <input type="number" data-i="${i}" class="tprice" value="${t.price}" style="max-width:80px">${t.night!=null?`<input type="number" data-i="${i}" class="tnight" value="${t.night}" title="Gece (00–05)" style="max-width:70px">`:''}
     <select data-i="${i}" class="tdir" style="max-width:110px"><option value="" ${t.dir==null?'selected':''}>Her yön</option>
       <option value="90" ${t.dir===90?'selected':''}>Yalnız doğuya</option><option value="270" ${t.dir===270?'selected':''}>Yalnız batıya</option>
       <option value="0" ${t.dir===0?'selected':''}>Yalnız kuzeye</option><option value="180" ${t.dir===180?'selected':''}>Yalnız güneye</option></select>
@@ -325,7 +328,7 @@ $('#addvia').onclick=()=>{if(!map){msg('Önce harita yüklenmeli (API anahtarı)
 $('#addtp').onclick=()=>{if(!map){msg('Önce harita yüklenmeli (API anahtarı).',1);return;}setAdd('toll');};
 $('#tps').onchange=e=>{const i=+e.target.dataset.i,t=S.tp[i],c=e.target.classList;if(!t)return;
   if(c.contains('ton'))t.on=e.target.checked;if(c.contains('tname'))t.name=e.target.value;
-  if(c.contains('tprice'))t.price=parseFloat(e.target.value)||0;if(c.contains('tdir'))t.dir=e.target.value===''?null:+e.target.value;
+  if(c.contains('tprice'))t.price=parseFloat(e.target.value)||0;if(c.contains('tnight'))t.night=parseFloat(e.target.value)||0;if(c.contains('tdir'))t.dir=e.target.value===''?null:+e.target.value;
   save();if(R.length)render();};
 $('#tps').onclick=e=>{if(e.target.classList.contains('tdel')){S.tp.splice(+e.target.dataset.i,1);save();renderSettings();if(R.length)render();}};
 let clrArmed=false;
