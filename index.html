@@ -42,7 +42,7 @@ button.pri,.btn.pri{background:var(--acc);color:#05121f;font-weight:600}
 .pend{margin:10px;padding:10px;background:var(--card);border:1px solid var(--acc);border-radius:10px}
 .pend input{max-width:90px;display:inline-block}
 .acw{position:relative;flex:1;display:flex;min-width:0}
-.ac{position:absolute;left:0;right:0;top:100%;z-index:20;background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.ac{position:absolute;left:0;right:0;top:100%;z-index:50;max-height:60vh;overflow-y:auto;box-shadow:0 8px 24px #000a;background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .ac:empty{display:none}
 .aci{padding:10px;border-bottom:1px solid var(--line);cursor:pointer}
 .aci span{color:var(--mut);font-size:13px}
@@ -348,19 +348,31 @@ function locate(force){if(!navigator.geolocation){if(force)msg('Konum desteklenm
 $('#loc').onclick=()=>locate(true);
 
 // ---------- Adres önerileri (Places API (New) Autocomplete) ----------
-async function acFetch(q){const body={input:q,languageCode:'tr',regionCode:'tr'};
-  const c=myPos||(P.from&&P.from.lat!=null?P.from:null);
+// Öneri kaynağı: önce Google Places (New). Etkin değilse ücretsiz OpenStreetMap (Photon) önerilerine düşer.
+let placesDown=false,acSrc='';
+async function acGoogle(q,c){const body={input:q,languageCode:'tr',regionCode:'tr'};
   if(c)body.locationBias={circle:{center:{latitude:c.lat,longitude:c.lng},radius:50000}};
   const r=await fetch('https://places.googleapis.com/v1/places:autocomplete',{method:'POST',
     headers:{'Content-Type':'application/json','X-Goog-Api-Key':S.key},body:JSON.stringify(body)});
   const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error((j.error&&j.error.message)||('HTTP '+r.status));
-  return (j.suggestions||[]).filter(s=>s.placePrediction).slice(0,5);}
+  return (j.suggestions||[]).filter(s=>s.placePrediction).slice(0,5).map(s=>{const p=s.placePrediction,m=p.structuredFormat;
+    return {main:m?m.mainText.text:p.text.text,sec:m&&m.secondaryText?m.secondaryText.text:'',place:{text:p.text.text,pid:p.placeId}};});}
+async function acOsm(q,c){let u='https://photon.komoot.io/api/?limit=5&q='+encodeURIComponent(q);
+  if(c)u+='&lat='+c.lat.toFixed(3)+'&lon='+c.lng.toFixed(3);else u+='&lat=41.01&lon=28.97';
+  const r=await fetch(u);if(!r.ok)throw new Error('OSM HTTP '+r.status);const j=await r.json();
+  return (j.features||[]).filter(f=>f.geometry&&f.geometry.coordinates).map(f=>{const o=f.properties||{},
+      main=o.name||[o.street,o.housenumber].filter(Boolean).join(' ')||o.city||q,
+      sec=[o.name?[o.street,o.housenumber].filter(Boolean).join(' '):'',o.district,o.city||o.county,o.state,o.country].filter((v,i,a)=>v&&v!==main&&a.indexOf(v)===i).join(', ');
+    return {main,sec,place:{text:main+(sec?', '+sec:''),lat:f.geometry.coordinates[1],lng:f.geometry.coordinates[0]}};});}
+async function acFetch(q){const c=myPos||(P.from&&P.from.lat!=null?P.from:null);
+  if(!placesDown){if(!spend('p',1))throw new Error('Aylık adres önerisi limiti doldu');
+    try{acSrc='Google';return await acGoogle(q,c);}catch(e){placesErr=e.message;placesDown=true;}}
+  acSrc='OpenStreetMap';return await acOsm(q,c);}
 // Listeden seçilmeden yazılmış adresi en iyi öneriye çevirir; ne anlaşıldığı kutuya yazılır
 async function resolvePlace(which){const p=P[which];if(!p||p.pid||p.lat!=null||p.me)return true;
   if(/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(p.text))return true;
-  if(!spend('p',1))return true;
-  try{const s=await acFetch(p.text);if(!s.length)return false;const pr=s[0].placePrediction;setPlace(which,{text:pr.text.text,pid:pr.placeId});return true;}
-  catch(e){placesErr=e.message;return true;}}
+  try{const s=await acFetch(p.text);if(!s.length)return false;setPlace(which,s[0].place);return true;}
+  catch(e){placesErr=placesErr||e.message;return true;}}
 let placesErr='';
 function attachAC(which){
   const inp=$('#'+which),box=document.createElement('div');box.className='ac';inp.parentElement.appendChild(box);
@@ -368,15 +380,18 @@ function attachAC(which){
   inp.addEventListener('input',()=>{const q=inp.value.trim();P[which]=q?{text:q}:null;S[which+'P']=P[which];save();
     clearTimeout(timer);if(q.length<3||!S.key){box.innerHTML='';return;}
     timer=setTimeout(async()=>{const my=++seq;
-      if(!spend('p',1)){box.innerHTML='<div class="aci"><span>Aylık adres önerisi limiti doldu</span></div>';return;}
+      box.innerHTML='<div class="aci"><span>Aranıyor…</span></div>';
       try{const sug=await acFetch(q);if(my!==seq)return;box._sug=sug;
-        box.innerHTML=sug.map((s,i)=>{const p=s.placePrediction,m=p.structuredFormat;
-          return `<div class="aci" data-i="${i}"><b>${esc(m?m.mainText.text:p.text.text)}</b><br><span>${esc(m&&m.secondaryText?m.secondaryText.text:'')}</span></div>`;}).join('');
-      }catch(e){box.innerHTML='';msg('Adres önerisi alınamadı: '+(/not been used|disabled|blocked/i.test(e.message)?'Places API (New) etkin değil ya da anahtara ekli değil.':e.message.slice(0,120)),1);}
+        box.innerHTML=sug.length?sug.map((s,i)=>`<div class="aci" data-i="${i}"><b>${esc(s.main)}</b><br><span>${esc(s.sec)}</span></div>`).join('')
+            +(acSrc!=='Google'?'<div class="aci"><span>Öneriler OpenStreetMap\'ten (Google Places etkin değil)</span></div>':'')
+          :'<div class="aci"><span>Sonuç yok</span></div>';
+      }catch(e){if(my!==seq)return;box.innerHTML=`<div class="aci"><span style="color:var(--bad)">Öneri alınamadı: ${esc(e.message.slice(0,120))}</span></div>`;}
     },350);});
-  box.addEventListener('click',e=>{const it=e.target.closest('.aci[data-i]');if(!it)return;const p=box._sug[+it.dataset.i].placePrediction;
-    setPlace(which,{text:p.text.text,pid:p.placeId});box.innerHTML='';inp.blur();});
-  inp.addEventListener('blur',()=>setTimeout(()=>{box.innerHTML='';},250));
+  // dokunma: blur'dan önce yakalamak için pointerdown
+  const pick=e=>{const it=e.target.closest('.aci[data-i]');if(!it)return;e.preventDefault();
+    setPlace(which,box._sug[+it.dataset.i].place);box.innerHTML='';inp.blur();};
+  box.addEventListener('pointerdown',pick);box.addEventListener('click',pick);
+  inp.addEventListener('blur',()=>setTimeout(()=>{box.innerHTML='';},400));
   inp.addEventListener('focus',()=>{if(P[which]&&P[which].me)inp.select();});
 }
 attachAC('from');attachAC('to');
@@ -523,7 +538,7 @@ async function run(){
   R=keep;const nHidden=nAll-R.length;
   R.forEach((x,i)=>{x.label=String.fromCharCode(65+i);x.color=COLORS[i%COLORS.length];});
   render();drawAll();
-  msg('Varış: '+P.to.text+(P.to.pid?'':' (listeden seçilmedi, Google kendi yorumladı)')+' · '+R.length+' rota'+(nHidden?' ('+nHidden+' yavaş rota gizlendi)':'')+'.'+(placesErr?' Adres önerisi çalışmıyor: '+(/not been used|disabled|blocked/i.test(placesErr)?'Places API (New) etkin değil ya da anahtara ekli değil.':placesErr.slice(0,120)):'')+(autoTried?` Otomatik: ${autoTried} denendi, ${R.filter(x=>x.auto).length} kaldı.`:'')+(errs.length?' (Başarısız: '+errs.join(' | ')+')':''));
+  msg('Varış: '+P.to.text+(P.to.pid||P.to.lat!=null?'':' (listeden seçilmedi, Google kendi yorumladı)')+' · '+R.length+' rota'+(nHidden?' ('+nHidden+' yavaş rota gizlendi)':'')+'.'+(placesErr?' Google adres önerisi kapalı ('+(/not been used|disabled|blocked/i.test(placesErr)?'Places API (New) etkin değil':placesErr.slice(0,80))+'); OpenStreetMap kullanıldı.':'')+(autoTried?` Otomatik: ${autoTried} denendi, ${R.filter(x=>x.auto).length} kaldı.`:'')+(errs.length?' (Başarısız: '+errs.join(' | ')+')':''));
 }
 
 // ---------- Kartlar ----------
