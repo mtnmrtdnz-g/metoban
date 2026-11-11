@@ -236,16 +236,23 @@ function hwToll(km){const parts=[];let sum=0;
   return {sum,parts};}
 // eski kayıtlara gece tarifesini ekle (00:00–04:59 arası yarı fiyat)
 S.tp.forEach(t=>{if(/^Avrasya/.test(t.name)&&t.night==null){t.night=Math.round(t.price/2);t.name='Avrasya Tüneli';}});
+// ad ile eşleştirme: rota talimatlarında geçidin adı geçiyorsa konum tutmasa da sayılır
+const TPRE=[[/^15 Temmuz/,'15 Temmuz|Boğaziçi Köprüsü'],[/^FSM/,'Fatih Sultan Mehmet|FSM Köprüsü'],[/^Yavuz/,'Yavuz Sultan Selim'],
+  [/^Avrasya/,'Avrasya T[üu]nel'],[/^Osmangazi/,'Osmangazi K[öo]pr'],[/^1915/,'1915 Çanakkale|Çanakkale K[öo]pr']];
+S.tp.forEach(t=>{if(t.re==null){const m=TPRE.find(([n])=>n.test(t.name));if(m)t.re=m[1];}if(/^Avrasya/.test(t.name)&&t.r<1200)t.r=1200;});
 const tpPrice=t=>(t.night!=null&&new Date().getHours()<5)?+t.night:+t.price;
 // Rota tablodaki noktalardan geçiyor mu? Yön kısıtı varsa rotanın o noktadaki yönüne bakılır.
-function tableToll(g){const hit=[];let sum=0;
-  for(const t of S.tp){if(!t.on||!(tpPrice(t)>0))continue;const [x,y]=proj(t.lat,t.lng),n=nearestAny(g,x,y);if(n.d>(t.r||150))continue;
+function tableToll(g,txt){const hit=[];let sum=0;
+  for(const t of S.tp){if(!t.on||!(tpPrice(t)>0))continue;const [x,y]=proj(t.lat,t.lng),n=nearestAny(g,x,y);
+    let byName=false;if(t.re&&txt){try{byName=new RegExp(t.re,'i').test(txt);}catch(e){}}
+    if(n.d>(t.r||150)&&!byName)continue;
     if(t.dir!=null){const a=g.pts[Math.max(0,n.idx-5)],b=g.pts[Math.min(g.pts.length-1,n.idx+5)];
       const brg=Math.atan2(b.x-a.x,b.y-a.y),want=t.dir*Math.PI/180;if(Math.cos(brg-want)<=0)continue;}
     hit.push(Object.assign({},t,{price:tpPrice(t),name:t.name+(t.night!=null?(new Date().getHours()<5?' (gece)':' (gündüz)'):'')}));sum+=tpPrice(t);}
   return {sum,hit};}
-function finalToll(gt,g,km){if(gt.known&&gt.price>0)return Object.assign({src:'Google'},gt);
-  const m=tableToll(g),w=hwToll(km||{});
+function finalToll(gt,g,km,txt){const m=tableToll(g,txt),w=hwToll(km||{});
+  // Kendi tablomuzda bir köprü/tünel eşleştiyse o esas alınır; yoksa Google fiyat verdiyse o; o da yoksa otoyol tahmini
+  if(!m.sum&&gt.known&&gt.price>0)return Object.assign({src:'Google'},gt);
   if(m.sum+w.sum>0)return {has:true,known:true,price:m.sum+w.sum,cur:'TRY',src:w.sum?'tahmin':'tablo',hit:m.hit,hw:w.parts,more:gt.has&&!gt.known&&!w.sum};
   return Object.assign({src:gt.has?'Google':''},gt);}
 // ---------- Harcama kilidi ----------
@@ -518,7 +525,7 @@ async function run(){
   const byPoly=new Map();
   raw.forEach(x=>{const k=x.r.polyline.encodedPolyline,e=byPoly.get(k);
     if(e){x.tags.forEach(t=>{if(!e.tags.includes(t))e.tags.push(t);});e.auto=e.auto&&x.auto;e.def=e.def||x.def;}else byPoly.set(k,x);});
-  let list=[...byPoly.values()].map(x=>({r:x.r,tags:x.tags,auto:x.auto,via:x.via,def:!!x.def,dur:dur(x.r.duration),dist:x.r.distanceMeters||0,gtoll:tollOf(x.r),toll:tollOf(x.r),wind:windOf(x.r),hw:hwOf(x.r)}));
+  let list=[...byPoly.values()].map(x=>({r:x.r,tags:x.tags,auto:x.auto,via:x.via,def:!!x.def,dur:dur(x.r.duration),dist:x.r.distanceMeters||0,gtoll:tollOf(x.r),toll:tollOf(x.r),wind:windOf(x.r),hw:hwOf(x.r),txt:(x.r.legs||[]).map(l=>(l.steps||[]).map(s=>(s.navigationInstruction&&s.navigationInstruction.instructions)||'').join(' | ')).join(' | ')}));
   const minDur=Math.min(...list.map(x=>x.dur));
   // otomatik adayları ele: %25'ten fazla yavaş ya da dolambaçlı
   list=list.filter(x=>!x.auto||(x.dur<=1.25*minDur&&x.wind.perKm<=S.wmax));
@@ -535,7 +542,7 @@ async function run(){
   R=kept.filter((x,i)=>i===0||!x.auto||!x.br.some(b=>b.ai.len<150&&b.bi.len>400));
   // sadeleştir: en hızlıdan %30'dan fazla yavaş olanları gizle, en fazla 5 rota göster.
   // Kendi kaydettiğin koridorlar ve en ucuz rota her zaman kalır.
-  const nAll=R.length;R.forEach(x=>{x.toll=finalToll(x.gtoll,x.g,x.hw);});
+  const nAll=R.length;R.forEach(x=>{x.toll=finalToll(x.gtoll,x.g,x.hw,x.txt);});
   const price=x=>x.toll.known?x.toll.price:Infinity,minP=Math.min(...R.map(price));
   const cheapest=R.find(x=>price(x)===minP),mine=x=>x.tags.some(t=>S.vias.some(v=>v.name===t));
   let keep=R.filter(x=>x===R[0]||x===cheapest||mine(x)||x.eff<=1.3*R[0].eff);
@@ -567,7 +574,7 @@ function navUrl(x,i){
 }
 function render(){
   const A=R[0],thr=S.thr;
-  R.forEach(x=>{x.toll=finalToll(x.gtoll,x.g,x.hw);x.cost=x.toll.known?x.toll.price+(x.eff/60)*thr:NaN;x.windy=x.wind.perKm>S.wmax;});
+  R.forEach(x=>{x.toll=finalToll(x.gtoll,x.g,x.hw,x.txt);x.cost=x.toll.known?x.toll.price+(x.eff/60)*thr:NaN;x.windy=x.wind.perKm>S.wmax;});
   let pool=R.filter(x=>!isNaN(x.cost)&&!x.windy);if(!pool.length)pool=R.filter(x=>!isNaN(x.cost));
   const rec=pool.length?pool.reduce((a,b)=>b.cost<a.cost?b:a):null;
   if(sel==null||sel>=R.length)sel=rec?R.indexOf(rec):0;
@@ -586,7 +593,7 @@ function render(){
     <a class="btn pri nav" data-i="${sel}" href="${navUrl(sx,sel)}" target="_blank" rel="noopener">Navigasyon ▶ ${sx.label}</a></div>`;
   if(!spoken){spoken=true;speak(say);}
   $('#cards').innerHTML=R.map((x,i)=>{
-    const tollTag=!x.toll.has?'<span class="tag ok">Ücretsiz</span>':x.toll.known?`<span class="tag bad">Ücretli ${tollShort(x.toll)}</span>`+(x.toll.src==='tablo'?`<span class="tag">tablo: ${esc(x.toll.hit.map(t=>t.name).join(' + '))}${x.toll.more?' · başka gişe olabilir':''}</span>`:x.toll.src==='tahmin'?'<span class="tag">otoyol tahmini</span>':''):'<span class="tag bad">Ücretli (fiyat bilinmiyor)</span>';
+    const tollTag=!x.toll.has?'<span class="tag ok">Ücretsiz</span>':x.toll.known?`<span class="tag bad">Ücretli ${tollShort(x.toll)}</span>`+(x.toll.src==='tablo'?`<span class="tag">tablo: ${esc(x.toll.hit.map(t=>t.name).join(' + '))}${x.toll.more?' · başka gişe olabilir':''}</span>`:x.toll.src==='tahmin'?'<span class="tag">otoyol tahmini</span>':x.toll.src==='Google'?'<span class="tag">Google verisi</span>':''):'<span class="tag bad">Ücretli (fiyat bilinmiyor)</span>';
     let cmp='',cmp1='';
     if(i>0){const dt=(x.eff-A.eff)/60,dc=A.toll.price-x.toll.price;
       cmp1=`${A.label}'ya göre: ${dt>=0?'+':''}${dt.toFixed(1)} dk, ${isNaN(dc)?'ücret farkı ?':Math.abs(dc)<0.5?'ücret aynı':(dc>0?fmtTL(dc)+' ucuz':fmtTL(-dc)+' pahalı')}`;
@@ -598,6 +605,7 @@ function render(){
     const w=x.wind,windLine=`Dolambaç = ${w.turns} manevra / ${w.km.toFixed(1)} km = ${w.perKm.toFixed(2)} /km (eşik ${S.wmax}), kısa adım %${w.shortPct.toFixed(0)}`;
     const tl=x.toll,tollLine=(tl.src==='tahmin'||tl.src==='tablo')?'Ücret dökümü:\n'+(tl.hit||[]).map(t=>`  ${t.name}: ${fmtTL(+t.price)}`)
       .concat((tl.hw||[]).map(w=>`  ${w.name}: ${w.km.toFixed(1)} km × ${w.rate} = ${(w.km*w.rate).toFixed(0)}${w.cl?' → '+w.cl+' sınırı':''} → ${fmtTL(w.v)}`)).join('\n')+`\n  Toplam ${tl.src==='tahmin'?'≈ ':''}${fmtTL(tl.price)}`:'';
+    const roads=[...new Set((x.txt.match(/\b(O-?\d+|D\s?\d{3}|E\s?\d{2,3})\b|[A-ZÇĞİÖŞÜ][\wçğıöşü. ]+ (Tüneli|Köprüsü|Otoyolu)/g)||[]))].slice(0,12).join(', ');
     const costLine=isNaN(x.cost)?'Toplam maliyet: hesaplanamadı (ücret bilinmiyor)':
       `Toplam maliyet = ${fmtTL(x.toll.price)} + ${(x.eff/60).toFixed(1)} dk × ${thr} = ${x.cost.toFixed(0)}`;
     const divs=i===0?'':x.br.map((b,k)=>`<div class="div"><b>Ayrışma ${k+1}</b> — <a href="#" class="dz" data-i="${i}" data-k="${k}" style="color:var(--acc)">haritada göster</a><br>
@@ -610,7 +618,7 @@ function render(){
       <details><summary>Hesap ve ayrıntılar</summary>
       <div class="sub">Kaynak: ${esc(x.tags.join(', '))}${i>0?' · '+x.br.length+' ayrışma':''}</div>
       ${cmp?`<div class="math">${esc(cmp)}</div>`:''}${histLine?`<div class="math">${esc(histLine)}</div>`:''}
-      ${tollLine?`<div class="math">${esc(tollLine)}</div>`:''}<div class="math">${esc(windLine)}</div><div class="math">${esc(costLine)}</div>
+      ${tollLine?`<div class="math">${esc(tollLine)}</div>`:''}<div class="math">${esc(windLine)}</div><div class="math">${esc(costLine)}</div>${roads?`<div class="sub">Talimatlarda geçen yollar: ${esc(roads)}</div>`:''}
       ${divs}</details>
       <div class="acts">${i>0?`<button class="dz" data-i="${i}">Farkı göster</button>`:`<button class="all">Hepsini göster</button>`}
         <a class="btn pri nav" data-i="${i}" href="${navUrl(x,i)}" target="_blank" rel="noopener">Navigasyon ▶</a></div></div>`;}).join('');
