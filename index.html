@@ -197,7 +197,7 @@ const store={get(k,d){try{const v=localStorage.getItem('rk_'+k);return v==null?d
 const S={key:store.get('key',''),thr:store.get('thr',10),emis:store.get('emis','GASOLINE'),vias:store.get('vias',[]),
          from:store.get('from',''),to:store.get('to',''),wmax:store.get('wmax',2),auton:store.get('auton',2),
          tolls:store.get('tolls',1),lim_r:store.get('lim_r',900),lim_m:store.get('lim_m',9000),lim_p:store.get('lim_p',9000),
-         fromP:store.get('fromP',null),toP:store.get('toP',null),tp:store.get('tp',null),hw:store.get('hw',null),navgo:store.get('navgo',0),favs:store.get('favs',[]),autorun:store.get('autorun',1),voice:store.get('voice',1)};
+         fromP:store.get('fromP',null),toP:store.get('toP',null),tp:store.get('tp',null),hw:store.get('hw',null),hwv:store.get('hwv',0),navgo:store.get('navgo',0),favs:store.get('favs',[]),autorun:store.get('autorun',1),voice:store.get('voice',1)};
 // Otomobil (1. sınıf), 1 Temmuz 2026 tarifesi. dir: null=her yön, 90=yalnız doğuya (Avrupa→Anadolu), 270=yalnız batıya (Anadolu→Avrupa)
 if(!S.tp)S.tp=[
  {name:'15 Temmuz Köprüsü',lat:41.0453,lng:29.0343,price:59,dir:270,v:2,r:300,on:true},
@@ -207,15 +207,15 @@ if(!S.tp)S.tp=[
  {name:'Osmangazi Köprüsü',lat:40.7547,lng:29.5153,price:1170,dir:null,r:300,on:true},
  {name:'1915 Çanakkale Köprüsü',lat:40.3394,lng:26.6355,price:1170,dir:null,r:300,on:true}];
 // Otoyol km ücretleri: tam parkur ücreti / yaklaşık uzunluk (1 Temmuz 2026, otomobil). min/max: tarifedeki en düşük ve tam parkur ücreti.
-if(!S.hw)S.hw=[
- {id:'kmoA',name:'Kuzey Marmara (Avrupa, Kınalı–Odayeri)',rate:3.0,min:65,max:260},
- {id:'kc',name:'Kuzey Çevre (Odayeri–Kurnaköy, köprü hariç)',rate:5.4,min:45,max:490},
- {id:'kmoB',name:'Kuzey Marmara (Anadolu, Kurnaköy–Akyazı)',rate:3.55,min:45,max:600},
+// steps: resmî gişe tablosunda geçen tutarlar (1 Temmuz 2026). km × oran tahmini en yakın üst basamağa yuvarlanır.
+const HW_DEF=[
+ {id:'kmoA',name:'Kuzey Marmara (Avrupa, Kınalı–Fatih)',rate:3.0,min:65,max:260,steps:[65,105,120,165,195,225,260]},
+ {id:'kc',name:'Kuzey Çevre (Fenertepe–Kurnaköy, köprü hariç)',rate:5.8,min:45,max:490,steps:[45,65,105,120,165,195,260,305,335,370,405,455,490]},
+ {id:'kmoB',name:'Kuzey Marmara (Anadolu, Kurnaköy–Akyazı)',rate:3.55,min:45,max:600,steps:[45,65,105,120,165,195,225,260,295,310,345,370,410,430,480,490,530,560,600]},
  {id:'o4',name:'Anadolu Otoyolu O-4 (Çamlıca–Ankara)',rate:0.9,min:49,max:338},
- {id:'o3',name:'Avrupa Otoyolu O-3 (Mahmutbey–Edirne)',rate:0.8,min:49,max:168},
- {id:'o5',name:'İstanbul–İzmir O-5 (köprü hariç)',rate:4.3,min:0,max:1725},
- {id:'x',name:'Diğer ücretli yol',rate:1.5,min:0,max:9999}];
-// Rotanın adımlarından hangi ücretli otoyolda kaç km gidildiğini çıkarır (yol adı adım talimatından okunur)
+ {id:'o3',name:'Avrupa Otoyolu O-3 (Mahmutbey–Edirne)',rate:0.8,min:49,max:168,steps:[49,73,134,168]},
+ {id:'o5',name:'İstanbul–İzmir O-5 (köprü hariç)',rate:4.3,min:0,max:1725}];
+if(!S.hw||S.hwv!==2){S.hw=HW_DEF;S.hwv=2;}
 // Gerçek Google talimatları tabela listesi içerir ("A/B/C yönündeki çıkışa girin"); yalnızca yol kodu ve konuma güvenilir.
 //  O-7: tamamı ücretli. O-4: Çamlıca gişelerinin doğusu (boylam > 29.12). O-3: Mahmutbey gişelerinin batısı (boylam < 28.80).
 //  O-5: yalnızca körfezin güneyi (enlem < 40.80). Diğer her şey (O-1, O-2, D100, 'İstanbul-İzmir Otoyolu' tabelası) ücretsiz sayılır.
@@ -235,8 +235,9 @@ function hwOf(r){const km={};let cur=null;
     cur=id;if(id)km[id]=(km[id]||0)+d/1000;}
   return km;}
 function hwToll(km){const parts=[];let sum=0;
-  for(const h of S.hw){const k=km[h.id];if(!k||k<0.5)continue;const v=Math.round(Math.min(h.max,k>=5?Math.max(h.min,k*h.rate):k*h.rate));
-    parts.push({name:h.name,km:k,rate:h.rate,v,cl:k>=5&&k*h.rate<h.min?'en az':k*h.rate>h.max?'en çok':''});sum+=v;}
+  for(const h of S.hw){const k=km[h.id];if(!k||k<0.5)continue;let v=Math.round(Math.min(h.max,k>=5?Math.max(h.min,k*h.rate):k*h.rate)),snap='';
+    if(h.steps&&k>=5){const s=h.steps.find(q=>q>=0.93*k*h.rate);if(s){v=s;snap='tarife basamağı';}}
+    parts.push({name:h.name,km:k,rate:h.rate,v,cl:snap||(k>=5&&k*h.rate<h.min?'en az':k*h.rate>h.max?'en çok':'')});sum+=v;}
   return {sum,parts};}
 // eski kayıtlara gece tarifesini ekle (00:00–04:59 arası yarı fiyat)
 S.tp.forEach(t=>{if(/^Avrasya/.test(t.name)&&t.night==null){t.night=Math.round(t.price/2);t.name='Avrasya Tüneli';}});
@@ -282,7 +283,7 @@ const COLORS=['#5aa9ff','#f5b942','#c77dff','#3ecf8e','#ff8fab','#7ee8fa','#ffd1
 let map=null,overlays=[],viaMarkers=[],addMode=false,R=[],DEF=null,sel=null,spoken=true,autoDone=false,forceAuto=false;
 
 function msg(t,err){$('#msg').textContent=t||'';$('#msg').className=err?'err':'';}
-function save(){['key','thr','emis','vias','wmax','auton','tolls','lim_r','lim_m','lim_p','fromP','toP','tp','hw','navgo','favs','autorun','voice'].forEach(k=>store.set(k,S[k]));}
+function save(){['key','thr','emis','vias','wmax','auton','tolls','lim_r','lim_m','lim_p','fromP','toP','tp','hw','hwv','navgo','favs','autorun','voice'].forEach(k=>store.set(k,S[k]));}
 const fmtMin=s=>(s/60).toFixed(1)+' dk', fmtKm=m=>(m/1000).toFixed(1)+' km';
 const fmtTL=v=>isNaN(v)?'? ₺':(Math.round(v*100)/100).toLocaleString('tr-TR')+' ₺';
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -619,7 +620,7 @@ function render(){
       :`1 sürüş kaydı var (gerçek/tahmin = ${h.ratio.toFixed(2)}); düzeltme için en az 2 gerekli`;
     const w=x.wind,windLine=`Dolambaç = ${w.turns} manevra / ${w.km.toFixed(1)} km = ${w.perKm.toFixed(2)} /km (eşik ${S.wmax}), kısa adım %${w.shortPct.toFixed(0)}`;
     const tl=x.toll,tollLine=(tl.src==='tahmin'||tl.src==='tablo')?'Ücret dökümü:\n'+(tl.hit||[]).map(t=>`  ${t.name}: ${fmtTL(+t.price)}`)
-      .concat((tl.hw||[]).map(w=>`  ${w.name}: ${w.km.toFixed(1)} km × ${w.rate} = ${(w.km*w.rate).toFixed(0)}${w.cl?' → '+w.cl+' sınırı':''} → ${fmtTL(w.v)}`)).join('\n')+`\n  Toplam ${tl.src==='tahmin'?'≈ ':''}${fmtTL(tl.price)}`:'';
+      .concat((tl.hw||[]).map(w=>`  ${w.name}: ${w.km.toFixed(1)} km × ${w.rate} = ${(w.km*w.rate).toFixed(0)}${w.cl?' → '+w.cl:''} → ${fmtTL(w.v)}`)).join('\n')+`\n  Toplam ${tl.src==='tahmin'?'≈ ':''}${fmtTL(tl.price)}`:'';
     const roads=[...new Set((x.txt.match(/\b(O-?\d+|D\s?\d{3}|E\s?\d{2,3})\b|[A-ZÇĞİÖŞÜ][\wçğıöşü. ]+ (Tüneli|Köprüsü|Otoyolu)/g)||[]))].slice(0,12).join(', ');
     const costLine=isNaN(x.cost)?'Toplam maliyet: hesaplanamadı (ücret bilinmiyor)':
       `Toplam maliyet = ${fmtTL(x.toll.price)} + ${(x.eff/60).toFixed(1)} dk × ${thr} = ${x.cost.toFixed(0)}`;
