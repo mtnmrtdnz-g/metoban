@@ -79,6 +79,7 @@ details{margin-top:8px}summary{color:var(--acc);cursor:pointer;font-size:14px}
   <label>Açılışta son hedefe otomatik arama / öneriyi sesli oku</label>
   <div class="row"><select id="autorun"><option value="1">Otomatik arama açık</option><option value="0">Otomatik arama kapalı</option></select>
     <select id="navgo"><option value="0">Maps: önce rotayı göster</option><option value="1">Maps: doğrudan başlat</option></select>
+    <select id="wpmax"><option value="3">Ara nokta: en fazla 3</option><option value="6">Ara nokta: en fazla 6</option><option value="9">Ara nokta: en fazla 9</option></select>
     <select id="voice"><option value="1">Ses açık</option><option value="0">Ses kapalı</option></select></div>
   <label>Favori hedefler</label>
   <div id="favlist"></div>
@@ -200,7 +201,7 @@ const store={get(k,d){try{const v=localStorage.getItem('rk_'+k);return v==null?d
 const S={key:store.get('key',''),thr:store.get('thr',10),emis:store.get('emis','GASOLINE'),vias:store.get('vias',[]),
          from:store.get('from',''),to:store.get('to',''),wmax:store.get('wmax',2),auton:store.get('auton',2),
          tolls:store.get('tolls',1),lim_r:store.get('lim_r',900),lim_m:store.get('lim_m',9000),lim_p:store.get('lim_p',9000),
-         fromP:store.get('fromP',null),toP:store.get('toP',null),tp:store.get('tp',null),hw:store.get('hw',null),hwv:store.get('hwv',0),navgo:store.get('navgo',0),favs:store.get('favs',[]),autorun:store.get('autorun',1),voice:store.get('voice',1)};
+         fromP:store.get('fromP',null),toP:store.get('toP',null),tp:store.get('tp',null),hw:store.get('hw',null),hwv:store.get('hwv',0),navgo:store.get('navgo',0),wpmax:store.get('wpmax',9),favs:store.get('favs',[]),autorun:store.get('autorun',1),voice:store.get('voice',1)};
 // Otomobil (1. sınıf), 1 Temmuz 2026 tarifesi. dir: null=her yön, 90=yalnız doğuya (Avrupa→Anadolu), 270=yalnız batıya (Anadolu→Avrupa)
 if(!S.tp)S.tp=[
  {name:'15 Temmuz Köprüsü',lat:41.0453,lng:29.0343,price:59,dir:270,v:2,r:300,on:true},
@@ -292,7 +293,7 @@ function why(m){m=String(m||'');
   if(/Failed to fetch|NetworkError|Load failed/i.test(m))return 'İstek gönderilemedi: internet yok ya da anahtarın web sitesi kısıtı bu adrese izin vermiyor.';
   return m.slice(0,160);}
 function msg(t,err){$('#msg').textContent=t||'';$('#msg').className=err?'err':'';}
-function save(){['key','thr','emis','vias','wmax','auton','tolls','lim_r','lim_m','lim_p','fromP','toP','tp','hw','hwv','navgo','favs','autorun','voice'].forEach(k=>store.set(k,S[k]));}
+function save(){['key','thr','emis','vias','wmax','auton','tolls','lim_r','lim_m','lim_p','fromP','toP','tp','hw','hwv','navgo','wpmax','favs','autorun','voice'].forEach(k=>store.set(k,S[k]));}
 const fmtMin=s=>(s/60).toFixed(1)+' dk', fmtKm=m=>(m/1000).toFixed(1)+' km';
 const fmtTL=v=>isNaN(v)?'? ₺':(Math.round(v*100)/100).toLocaleString('tr-TR')+' ₺';
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -317,7 +318,7 @@ function renderSettings(){
     <button data-i="${i}" class="tdel">✕</button></div>`).join('')||'<div class="hint">Henüz yok.</div>';
   $('#hws').innerHTML=S.hw.map((w,i)=>`<div class="via"><span class="hint" style="flex:3">${esc(w.name)}</span>
     <input type="number" step="0.05" data-i="${i}" class="hrate" value="${w.rate}" style="max-width:80px"></div>`).join('');
-  $('#navgo').value=String(S.navgo);$('#autorun').value=String(S.autorun);$('#voice').value=String(S.voice);
+  $('#navgo').value=String(S.navgo);$('#wpmax').value=String(S.wpmax);$('#autorun').value=String(S.autorun);$('#voice').value=String(S.voice);
   $('#favlist').innerHTML=S.favs.map((f,i)=>`<div class="via"><input type="text" data-i="${i}" class="fname" value="${esc(f.name)}">
     <span class="hint">${esc(f.p.text).slice(0,40)}</span><button data-i="${i}" class="fdel">✕</button></div>`).join('')||'<div class="hint">Henüz yok. Bir hedef seçip üstteki ☆ Kaydet düğmesine bas.</div>';
   renderFavs();drawViaMarkers();renderLogs();
@@ -332,6 +333,7 @@ $('#favlist').onchange=e=>{if(e.target.classList.contains('fname')){S.favs[+e.ta
 $('#favlist').onclick=e=>{if(e.target.classList.contains('fdel')){S.favs.splice(+e.target.dataset.i,1);save();renderSettings();}};
 $('#hws').onchange=e=>{if(e.target.classList.contains('hrate')){S.hw[+e.target.dataset.i].rate=parseFloat(e.target.value)||0;save();if(R.length)render();}};
 $('#autorun').onchange=e=>{S.autorun=+e.target.value;save();};
+$('#wpmax').onchange=e=>{S.wpmax=+e.target.value;save();if(R.length)render();};
 $('#navgo').onchange=e=>{S.navgo=+e.target.value;save();if(R.length)render();};
 $('#voice').onchange=e=>{S.voice=+e.target.value;save();if(!S.voice&&window.speechSynthesis)speechSynthesis.cancel();};
 function speak(t){if(!S.voice||!window.speechSynthesis||!window.SpeechSynthesisUtterance)return;
@@ -590,17 +592,38 @@ function navUrl(x,i){
     if(p.lat!=null)return '&'+name+'='+enc(p.lat.toFixed(6)+','+p.lng.toFixed(6));return '&'+name+'='+enc(p.text);};
   // başlangıç "Konumum" ise origin gönderilmez; Google Maps telefonun anlık konumunu kullanır
   let u='https://www.google.com/maps/dir/?api=1&travelmode=driving'+(S.navgo?'&dir_action=navigate':'')+part('origin',P.from)+part('destination',P.to);
-  // Google Maps kendi varsayılan rotasını çizer. Seçilen rota ondan farklıysa, ayrıldığı kesimlerin
-  // üzerine en fazla 3 ara nokta koyarak Maps'i bu rotaya zorlarız.
-  const w=[];
-  if(DEF&&x!==DEF){const P=x.g.pts,brs=diff(x.g,DEF.g).map(o=>({s:o.b[0],e:o.b[1],len:P[o.b[1]].d-P[o.b[0]].d})).sort((p,q)=>q.len-p.len).slice(0,3);
-    const fr=brs.length===1?(brs[0].len>3000?[[.25,.5,.75]]:[[.5]]):brs.length===2?[[.33,.66],[.5]]:[[.5],[.5],[.5]];
-    brs.forEach((o,k)=>fr[k].forEach(f=>w.push(P[Math.round(o.s+(o.e-o.s)*f)])));w.sort((p,q)=>p.d-q.d);}
+  // Google Maps kendi rotasını çizer. Seçilen rotayı kilitlemek için ara noktalar:
+  //  1) seçilen rotanın diğer TÜM adaylardan ayrıldığı her kavşağın hemen sonrası (en önemli: yanlış sapmayı engeller)
+  //  2) kalan hakla rota boyunca eşit aralıklı "çapa" noktaları (Maps'in hiç listelenmemiş bir yola sapmasını engeller)
+  //  Noktalar kavşak/rampa yakınına değil, uzun bir yol kesiminin içine konur ki yanlış yola (alt geçit, yan yol) oturmasın.
+  const w=wpFor(x);
   if(w.length)u+='&waypoints='+enc(w.map(ll).join('|'));
-  else if(!DEF&&x.via){const [vx,vy]=proj(x.via.lat,x.via.lng);u+='&waypoints='+enc(ll(x.g.pts[nearestAny(x.g,vx,vy).idx]));}
   x.navWp=w.length;
   return u;
 }
+function wpFor(x){
+  const MAXW=Math.max(0,Math.min(9,+S.wpmax||0)),P=x.g.pts,N=P.length,L=P[N-1].d;if(!MAXW||N<10)return [];
+  // her adımın başlangıç/bitiş mesafesi
+  const st=new Map();P.forEach(p=>{const r=st.get(p.step);if(!r)st.set(p.step,[p.d,p.d]);else r[1]=p.d;});
+  const good=k=>{const r=st.get(P[k].step);return P[k].d-r[0]>250&&r[1]-P[k].d>250&&P[k].d>800&&L-P[k].d>800;};
+  const settle=(k,lo,hi,ok)=>{for(let j=0;j<80;j++)for(const s of [k+j,k-j])if(s>=lo&&s<=hi&&good(s)&&(!ok||ok(s)))return s;return -1;};
+  const cand=[];
+  const others=R.filter(y=>y!==x);if(DEF&&DEF!==x&&!others.includes(DEF))others.push(DEF);
+  for(const y of others)for(const o of diff(x.g,y.g)){const s=o.b[0],e=o.b[1],len=P[e].d-P[s].d;if(len<300)continue;
+    // ayrılmadan 400 m sonra (kısa kolda kolun %30'u), ve diğer rotadan en az 120 m uzakta
+    let k=s;const tgt=P[s].d+Math.min(400,0.3*len);while(k<e&&P[k].d<tgt)k++;
+    const far=j=>nearest(y.g,P[j].x,P[j].y).d>120;
+    const kk=settle(k,s,e,far);if(kk>=0)cand.push({i:kk,pri:2,len});
+    if(len>8000){const m=settle(Math.floor((s+e)/2),s,e,far);if(m>=0)cand.push({i:m,pri:1,len});}}
+  if(x.via){const [vx,vy]=proj(x.via.lat,x.via.lng),n=nearestAny(x.g,vx,vy);const k=settle(n.idx,0,N-1);if(k>=0)cand.push({i:k,pri:3,len:1e9});}
+  cand.sort((p,q)=>q.pri-p.pri||q.len-p.len);
+  const pick=[],gap=Math.max(1200,L/(MAXW+1)*0.5),clear=k=>pick.every(j=>Math.abs(P[j].d-P[k].d)>=Math.min(gap,1500));
+  for(const c of cand){if(pick.length>=MAXW)break;if(clear(c.i))pick.push(c.i);}
+  const nDiv=pick.length;
+  // çapa noktaları: rotayı eşit parçalara böl, boş kalan parçalara birer nokta
+  for(let f=1;f<=MAXW&&pick.length<MAXW;f++){const t=L*f/(MAXW+1);let k=0;while(k<N-1&&P[k].d<t)k++;
+    const kk=settle(k,0,N-1);if(kk>=0&&pick.every(j=>Math.abs(P[j].d-P[kk].d)>=gap))pick.push(kk);}
+  pick.sort((p,q)=>p-q);x.navDiv=nDiv;return pick.map(k=>P[k]);}
 function render(){
   const A=R[0],thr=S.thr;
   R.forEach(x=>{x.toll=finalToll(x.gtoll,x.g,x.hw);x.cost=x.toll.known?x.toll.price+(x.eff/60)*thr:NaN;x.windy=x.wind.perKm>S.wmax;});
@@ -619,7 +642,7 @@ function render(){
   const sx=R[sel],other=rec&&sx!==rec;
   $('#verdict').innerHTML=`<div class="vd"><div class="vt">${vt}</div>
     ${other?`<div class="vs">Seçili: <b style="color:${sx.color}">${sx.label}</b> · ${mn(sx.eff/60)} dk · ${tollShort(sx.toll)} <a href="#" id="vback" style="color:var(--acc)">öneriye dön</a></div>`:''}
-    <a class="btn pri nav" data-i="${sel}" href="${navUrl(sx,sel)}" target="_blank" rel="noopener">Navigasyon ▶ ${sx.label}</a></div>`;
+    <a class="btn pri nav" data-i="${sel}" href="${navUrl(sx,sel)}" target="_blank" rel="noopener">Navigasyon ▶ ${sx.label}</a><div class="vs">${sx.navWp?`Maps'e ${sx.navWp} ara nokta gönderiliyor (${sx.navDiv} sapma noktası + ${sx.navWp-sx.navDiv} çapa)`:'Ara nokta yok: Google zaten bu rotayı seçiyor'}</div></div>`;
   if(!spoken){spoken=true;speak(say);}
   $('#cards').innerHTML=R.map((x,i)=>{
     const tollTag=!x.toll.has?'<span class="tag ok">Ücretsiz</span>':x.toll.known?`<span class="tag bad">Ücretli ${tollShort(x.toll)}</span>`+(x.toll.src==='tablo'?`<span class="tag">tablo: ${esc(x.toll.hit.map(t=>t.name).join(' + '))}${x.toll.more?' · başka gişe olabilir':''}</span>`:x.toll.src==='tahmin'?'<span class="tag">otoyol tahmini</span>':x.toll.src==='Google'?'<span class="tag">Google verisi</span>':''):'<span class="tag bad">Ücretli (fiyat bilinmiyor)</span>';
