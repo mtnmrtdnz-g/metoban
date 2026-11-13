@@ -282,6 +282,12 @@ let LOG=store.get('log',[])||[];
 const COLORS=['#5aa9ff','#f5b942','#c77dff','#3ecf8e','#ff8fab','#7ee8fa','#ffd166','#a0a0ff'];
 let map=null,overlays=[],viaMarkers=[],addMode=false,R=[],DEF=null,sel=null,spoken=true,autoDone=false,forceAuto=false;
 
+function why(m){m=String(m||'');
+  if(/quota|RESOURCE_EXHAUSTED|rate limit|429/i.test(m))return 'Google kotası doldu (Console\'da koyduğun günlük sınır). Yarın sıfırlanır ya da Console > Kotalar\'dan sınırı yükselt. ['+m.slice(0,90)+']';
+  if(/billing/i.test(m))return 'Google faturalandırma sorunu: projede faturalandırma kapalı ya da deneme süresi bitmiş. ['+m.slice(0,90)+']';
+  if(/referer|referrer|API key|API_KEY|PERMISSION_DENIED|not been used|disabled|blocked/i.test(m))return 'Anahtar ya da API izni sorunu: anahtar kısıtı bu adresi/API\'yi kapsamıyor olabilir. ['+m.slice(0,120)+']';
+  if(/Failed to fetch|NetworkError|Load failed/i.test(m))return 'İstek gönderilemedi: internet yok ya da anahtarın web sitesi kısıtı bu adrese izin vermiyor.';
+  return m.slice(0,160);}
 function msg(t,err){$('#msg').textContent=t||'';$('#msg').className=err?'err':'';}
 function save(){['key','thr','emis','vias','wmax','auton','tolls','lim_r','lim_m','lim_p','fromP','toP','tp','hw','hwv','navgo','favs','autorun','voice'].forEach(k=>store.set(k,S[k]));}
 const fmtMin=s=>(s/60).toFixed(1)+' dk', fmtKm=m=>(m/1000).toFixed(1)+' km';
@@ -399,7 +405,7 @@ async function acFetch(q){const c=myPos||(P.from&&P.from.lat!=null?P.from:null);
 // Listeden seçilmeden yazılmış adresi en iyi öneriye çevirir; ne anlaşıldığı kutuya yazılır
 async function resolvePlace(which){const p=P[which];if(!p||p.pid||p.lat!=null||p.me)return true;
   if(/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(p.text))return true;
-  try{const s=await acFetch(p.text);if(!s.length)return false;setPlace(which,s[0].place);return true;}
+  try{const s=await acFetch(p.text);if(s.length)setPlace(which,s[0].place);return true;}
   catch(e){placesErr=placesErr||e.message;return true;}}
 let placesErr='';
 function attachAC(which){
@@ -523,8 +529,8 @@ async function run(){
   if(!spend('r',jobs.length)){msg(`Aylık Routes limiti doldu: ${u0.r} kullanıldı, bu arama ${need} istek ister, limit ${S.lim_r}. Arama yapılmadı.`,1);return;}
   const res=await Promise.allSettled(jobs.map(j=>compute(o,d,j.mod,j.alt,j.via)));
   const raw=[],errs=[];
-  res.forEach((r,i)=>{if(r.status==='fulfilled')r.value.forEach((x,k)=>raw.push({r:x,tags:[jobs[i].tag],auto:false,via:jobs[i].via||null,def:i===0&&k===0}));else errs.push(jobs[i].tag+': '+r.reason.message);});
-  if(!raw.length){msg('Rota alınamadı. '+errs.join(' | '),1);return;}
+  res.forEach((r,i)=>{if(r.status==='fulfilled')r.value.forEach((x,k)=>raw.push({r:x,tags:[jobs[i].tag],auto:false,via:jobs[i].via||null,def:i===0&&k===0}));else errs.push(jobs[i].tag+': '+why(r.reason.message));});
+  if(!raw.length){msg('Rota alınamadı. '+(errs[0]||'Google bu iki nokta arasında rota döndürmedi; adresleri kontrol et.'),1);return;}
   const f0=raw.reduce((a,b)=>dur(b.r.duration)<dur(a.r.duration)?b:a);
   const p0=decodePoly(f0.r.polyline.encodedPolyline)[0];setOrigin(p0[0],p0[1]);
 
