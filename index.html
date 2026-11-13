@@ -44,6 +44,9 @@ button.pri,.btn.pri{background:var(--acc);color:#05121f;font-weight:600}
 .acw{position:relative;flex:1;display:flex;min-width:0}
 .ac{position:absolute;left:0;right:0;top:100%;z-index:50;max-height:60vh;overflow-y:auto;box-shadow:0 8px 24px #000a;background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .ac:empty{display:none}
+.acw input{padding-right:40px}
+.clr{position:absolute;right:2px;top:50%;transform:translateY(-50%);width:36px;height:36px;padding:0;border-radius:50%;background:transparent;color:var(--mut);font-size:20px;line-height:1;display:none}
+.clr.on{display:block}
 .aci{padding:10px;border-bottom:1px solid var(--line);cursor:pointer}
 .aci span{color:var(--mut);font-size:13px}
 .aci:active{background:var(--line)}
@@ -366,7 +369,7 @@ $('#clrlog').onclick=()=>{if(!clrArmed){clrArmed=true;$('#clrlog').textContent='
 
 // ---------- Nereden / Nereye: yer nesnesi {text, pid, lat, lng, me} ----------
 const P={from:null,to:null};
-function setPlace(which,p){P[which]=p;$('#'+which).value=p?p.text:'';S[which+'P']=p;save();if(typeof renderFavs==='function')renderFavs();}
+function setPlace(which,p){P[which]=p;const el=$('#'+which);el.value=p?p.text:'';if(el._upd)el._upd();S[which+'P']=p;save();if(typeof renderFavs==='function')renderFavs();}
 P.from=S.fromP;P.to=S.toP;$('#from').value=P.from?P.from.text:'';$('#to').value=P.to?P.to.text:'';
 function placeWp(p){if(!p)return null;if(p.me||(p.lat!=null&&!p.pid))return {location:{latLng:{latitude:p.lat,longitude:p.lng}}};
   if(p.pid)return {placeId:p.pid};return wp(p.text);}
@@ -410,6 +413,10 @@ async function resolvePlace(which){const p=P[which];if(!p||p.pid||p.lat!=null||p
 let placesErr='';
 function attachAC(which){
   const inp=$('#'+which),box=document.createElement('div');box.className='ac';inp.parentElement.appendChild(box);
+  const clr=document.createElement('button');clr.type='button';clr.className='clr';clr.textContent='✕';clr.title='Temizle';clr.setAttribute('aria-label','Temizle');inp.parentElement.appendChild(clr);
+  const upd=()=>clr.classList.toggle('on',!!inp.value);inp._upd=upd;upd();inp.addEventListener('input',upd);
+  // pointerdown: klavye kapanmadan ve liste kaybolmadan önce yakala
+  clr.addEventListener('pointerdown',e=>{e.preventDefault();setPlace(which,null);box.innerHTML='';inp.focus();});
   let timer=null,seq=0;
   inp.addEventListener('input',()=>{const q=inp.value.trim();P[which]=q?{text:q}:null;S[which+'P']=P[which];save();
     clearTimeout(timer);if(q.length<3||!S.key){box.innerHTML='';return;}
