@@ -247,8 +247,8 @@ S.tp.forEach(t=>{if(/^Avrasya/.test(t.name)&&t.night==null){t.night=Math.round(t
 // Geçit çizgisi: köprü/tünelin altındaki suyu kesen kısa bir çizgi. Rota bu çizgiyi keserse o geçitten geçiyordur.
 // (Tabela metinleri güvenilmez: 'Avrasya Tüneli yönü' yazan çıkış tünele girmeyebilir; bu yüzden adla eşleştirme yok.)
 const GATES=[[/^15 Temmuz/,[41.042,29.028,41.048,29.039],300],[/^FSM/,[41.087,29.0615,41.096,29.0615],300],
-  [/^Yavuz/,[41.195,29.1115,41.212,29.1115],500],[/^Avrasya/,[40.960,29.000,41.022,29.000],0],
-  [/^Osmangazi/,[40.755,29.495,40.755,29.535],500],[/^1915/,[40.330,26.620,40.350,26.650],500]];
+  [/^Yavuz/,[41.190,29.1115,41.218,29.1115],800],[/^Avrasya/,[40.960,29.000,41.022,29.000],0],
+  [/^Osmangazi/,[40.755,29.470,40.755,29.600],1500],[/^1915/,[40.320,26.605,40.360,26.665],1500]];
 // 15 Temmuz ve FSM: ücret Anadolu→Avrupa yönünde (eski kayıtlarda ters yazılmıştı, bir kez düzeltilir)
 S.tp.forEach(t=>{if(/^(15 Temmuz|FSM)/.test(t.name)&&t.v!==2){if(t.dir===90)t.dir=270;t.v=2;}});
 S.tp.forEach(t=>{const m=GATES.find(([n])=>n.test(t.name));if(m){t.gate=m[1];t.r=m[2];}delete t.re;});
@@ -658,6 +658,8 @@ function report(){const L=[];L.push('Rota raporu '+new Date().toLocaleString('tr
     L.push('Google ücret verisi: '+JSON.stringify((x.r.travelAdvisory&&x.r.travelAdvisory.tollInfo)||null));
     const t=x.toll;L.push(`Hesaplanan: ${t.has?(t.known?t.price+' TL':'bilinmiyor'):'ücretsiz'} (${t.src||'-'})`);
     (t.hit||[]).forEach(q=>L.push(`  tablo: ${q.name} = ${q.price}`));(t.hw||[]).forEach(w=>L.push(`  otoyol: ${w.name} ${w.km.toFixed(1)} km x ${w.rate} -> ${w.v} ${w.cl}`));
+    L.push('Geçitler: '+S.tp.map(q=>{const [gx,gy]=proj(q.lat,q.lng),n=nearestAny(x.g,gx,gy);if(n.d>30000)return null;const pt=x.g.pts[n.idx];
+      return `${q.name.slice(0,12)} ${q.gate&&crossIdx(x.g,q.gate)>=0?'KESTİ':'kesmedi'} en yakın ${Math.round(n.d)} m @${pt.lat.toFixed(4)},${pt.lng.toFixed(4)}`;}).filter(Boolean).join(' ; '));
     L.push('Adımlar (km | talimat):');
     for(const leg of (x.r.legs||[]))for(const s of (leg.steps||[])){const d=(s.distanceMeters||0)/1000;if(d<0.3)continue;
       L.push(`  ${d.toFixed(1)} | ${((s.navigationInstruction&&s.navigationInstruction.instructions)||'').replace(/\n/g,' / ')}`);}});
