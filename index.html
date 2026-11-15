@@ -284,7 +284,7 @@ function spend(kind,n){const u=usage(),F={r:['r','lim_r'],m:['mp','lim_m'],p:['p
   if(u[F[0]]+n>S[F[1]])return false;u[F[0]]+=n;store.set('usage',u);renderUsage();return true;}
 let LOG=store.get('log',[])||[];
 const COLORS=['#5aa9ff','#f5b942','#c77dff','#3ecf8e','#ff8fab','#7ee8fa','#ffd166','#a0a0ff'];
-let map=null,overlays=[],viaMarkers=[],addMode=false,R=[],DEF=null,sel=null,spoken=true,autoDone=false,forceAuto=false;
+let map=null,overlays=[],viaMarkers=[],addMode=false,R=[],DEF=null,REV=null,runId=0,sel=null,spoken=true,autoDone=false,forceAuto=false;
 
 function why(m){m=String(m||'');
   if(/quota|RESOURCE_EXHAUSTED|rate limit|429/i.test(m))return 'Google kotası doldu (Console\'da koyduğun günlük sınır). Yarın sıfırlanır ya da Console > Kotalar\'dan sınırı yükselt. ['+m.slice(0,90)+']';
@@ -581,7 +581,10 @@ async function run(){
     keep=must.concat(rest.slice(0,Math.max(0,5-must.length))).sort((a,b)=>a.eff-b.eff);}
   R=keep;const nHidden=nAll-R.length;
   R.forEach((x,i)=>{x.label=String.fromCharCode(65+i);x.color=COLORS[i%COLORS.length];});
-  render();drawAll();$('#repwrap').style.display='block';$('#reptxt').style.display='none';
+  render();drawAll();$('#repwrap').style.display='block';
+  // Ters yön rotaları: ara noktaların karşı şeride (dönüş yoluna) düşmemesi için, karşı yöne 60 m'den yakın noktalar kullanılmaz.
+  REV=null;const myRun=++runId;
+  if(S.wpmax>0&&spend('r',1))compute(d,o,{},true).then(rs=>{if(myRun!==runId)return;REV=rs.map(r=>buildGeom(r));if(R.length)render();}).catch(()=>{});$('#reptxt').style.display='none';
   msg('Varış: '+P.to.text+(P.to.pid||P.to.lat!=null?'':' (listeden seçilmedi, Google kendi yorumladı)')+' · '+R.length+' rota'+(nHidden?' ('+nHidden+' yavaş rota gizlendi)':'')+'.'+(placesErr?' Google adres önerisi kapalı ('+(/not been used|disabled|blocked/i.test(placesErr)?'Places API (New) etkin değil':placesErr.slice(0,80))+'); OpenStreetMap kullanıldı.':'')+(autoTried?` Otomatik: ${autoTried} denendi, ${R.filter(x=>x.auto).length} kaldı.`:'')+(errs.length?' (Başarısız: '+errs.join(' | ')+')':''));
 }
 
@@ -602,28 +605,31 @@ function navUrl(x,i){
   return u;
 }
 function wpFor(x){
-  const MAXW=Math.max(0,Math.min(9,+S.wpmax||0)),P=x.g.pts,N=P.length,L=P[N-1].d;if(!MAXW||N<10)return [];
+  const MAXW=Math.max(0,Math.min(9,+S.wpmax||0)),P=x.g.pts,N=P.length,L=P[N-1].d;x.navSkip=0;x.navDiv=0;if(!MAXW||N<10)return [];
   // her adımın başlangıç/bitiş mesafesi
   const st=new Map();P.forEach(p=>{const r=st.get(p.step);if(!r)st.set(p.step,[p.d,p.d]);else r[1]=p.d;});
   const good=k=>{const r=st.get(P[k].step);return P[k].d-r[0]>250&&r[1]-P[k].d>250&&P[k].d>800&&L-P[k].d>800;};
-  const settle=(k,lo,hi,ok)=>{for(let j=0;j<80;j++)for(const s of [k+j,k-j])if(s>=lo&&s<=hi&&good(s)&&(!ok||ok(s)))return s;return -1;};
+  // karşı yön: ters rotalardan herhangi biri 60 m içinden geçiyorsa nokta karşı şeride oturabilir
+  const okRev=j=>!REV||REV.every(g=>!(nearest(g,P[j].x,P[j].y).d<=60));
+  const settle=(k,lo,hi,ok,span)=>{span=span||80;for(let j=0;j<=span;j++)for(const s of [k+j,k-j])if(s>=lo&&s<=hi&&good(s)&&(!ok||ok(s)))return s;return -1;};
   const cand=[];
   const others=R.filter(y=>y!==x);if(DEF&&DEF!==x&&!others.includes(DEF))others.push(DEF);
   for(const y of others)for(const o of diff(x.g,y.g)){const s=o.b[0],e=o.b[1],len=P[e].d-P[s].d;if(len<300)continue;
-    // ayrılmadan 400 m sonra (kısa kolda kolun %30'u), ve diğer rotadan en az 120 m uzakta
+    // ayrılmadan ~400 m sonra; diğer rotadan en az 120 m, karşı yönden en az 60 m uzakta. Bulunamazsa kolun tamamında aranır.
     let k=s;const tgt=P[s].d+Math.min(400,0.3*len);while(k<e&&P[k].d<tgt)k++;
     const far=j=>nearest(y.g,P[j].x,P[j].y).d>120;
-    const kk=settle(k,s,e,far);if(kk>=0)cand.push({i:kk,pri:2,len});
-    if(len>8000){const m=settle(Math.floor((s+e)/2),s,e,far);if(m>=0)cand.push({i:m,pri:1,len});}}
-  if(x.via){const [vx,vy]=proj(x.via.lat,x.via.lng),n=nearestAny(x.g,vx,vy);const k=settle(n.idx,0,N-1);if(k>=0)cand.push({i:k,pri:3,len:1e9});}
+    const kk=settle(k,s,e,j=>far(j)&&okRev(j),e-s);
+    if(kk>=0)cand.push({i:kk,pri:2,len});else if(settle(k,s,e,far,e-s)>=0)x.navSkip++;
+    if(len>8000){const m=settle(Math.floor((s+e)/2),s,e,j=>far(j)&&okRev(j));if(m>=0)cand.push({i:m,pri:1,len});}}
+  if(x.via){const [vx,vy]=proj(x.via.lat,x.via.lng),n=nearestAny(x.g,vx,vy);const k=settle(n.idx,0,N-1,okRev,200);if(k>=0)cand.push({i:k,pri:3,len:1e9});}
   cand.sort((p,q)=>q.pri-p.pri||q.len-p.len);
   const pick=[],gap=Math.max(1200,L/(MAXW+1)*0.5),clear=k=>pick.every(j=>Math.abs(P[j].d-P[k].d)>=Math.min(gap,1500));
   for(const c of cand){if(pick.length>=MAXW)break;if(clear(c.i))pick.push(c.i);}
-  const nDiv=pick.length;
-  // çapa noktaları: rotayı eşit parçalara böl, boş kalan parçalara birer nokta
+  x.navDiv=pick.length;
+  // çapa noktaları: rotayı eşit parçalara böl, boş kalan parçalara birer nokta (karşı yöne yakın yerler atlanır)
   for(let f=1;f<=MAXW&&pick.length<MAXW;f++){const t=L*f/(MAXW+1);let k=0;while(k<N-1&&P[k].d<t)k++;
-    const kk=settle(k,0,N-1);if(kk>=0&&pick.every(j=>Math.abs(P[j].d-P[kk].d)>=gap))pick.push(kk);}
-  pick.sort((p,q)=>p-q);x.navDiv=nDiv;return pick.map(k=>P[k]);}
+    const kk=settle(k,0,N-1,okRev);if(kk>=0&&pick.every(j=>Math.abs(P[j].d-P[kk].d)>=gap))pick.push(kk);}
+  pick.sort((p,q)=>p-q);return pick.map(k=>P[k]);}
 function render(){
   const A=R[0],thr=S.thr;
   R.forEach(x=>{x.toll=finalToll(x.gtoll,x.g,x.hw);x.cost=x.toll.known?x.toll.price+(x.eff/60)*thr:NaN;x.windy=x.wind.perKm>S.wmax;});
@@ -642,7 +648,7 @@ function render(){
   const sx=R[sel],other=rec&&sx!==rec;
   $('#verdict').innerHTML=`<div class="vd"><div class="vt">${vt}</div>
     ${other?`<div class="vs">Seçili: <b style="color:${sx.color}">${sx.label}</b> · ${mn(sx.eff/60)} dk · ${tollShort(sx.toll)} <a href="#" id="vback" style="color:var(--acc)">öneriye dön</a></div>`:''}
-    <a class="btn pri nav" data-i="${sel}" href="${navUrl(sx,sel)}" target="_blank" rel="noopener">Navigasyon ▶ ${sx.label}</a><div class="vs">${sx.navWp?`Maps'e ${sx.navWp} ara nokta gönderiliyor (${sx.navDiv} sapma noktası + ${sx.navWp-sx.navDiv} çapa)`:'Ara nokta yok: Google zaten bu rotayı seçiyor'}</div></div>`;
+    <a class="btn pri nav" data-i="${sel}" href="${navUrl(sx,sel)}" target="_blank" rel="noopener">Navigasyon ▶ ${sx.label}</a><div class="vs">${sx.navWp?`Maps'e ${sx.navWp} ara nokta gönderiliyor (${sx.navDiv} sapma noktası + ${sx.navWp-sx.navDiv} çapa)${sx.navSkip?`, karşı şeride yakın ${sx.navSkip} sapma noktası atlandı`:''}${REV?'':' · karşı yön kontrolü bekleniyor…'}`:'Ara nokta yok: Google zaten bu rotayı seçiyor'}</div></div>`;
   if(!spoken){spoken=true;speak(say);}
   $('#cards').innerHTML=R.map((x,i)=>{
     const tollTag=!x.toll.has?'<span class="tag ok">Ücretsiz</span>':x.toll.known?`<span class="tag bad">Ücretli ${tollShort(x.toll)}</span>`+(x.toll.src==='tablo'?`<span class="tag">tablo: ${esc(x.toll.hit.map(t=>t.name).join(' + '))}${x.toll.more?' · başka gişe olabilir':''}</span>`:x.toll.src==='tahmin'?'<span class="tag">otoyol tahmini</span>':x.toll.src==='Google'?'<span class="tag">Google verisi</span>':''):'<span class="tag bad">Ücretli (fiyat bilinmiyor)</span>';
