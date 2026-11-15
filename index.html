@@ -60,6 +60,10 @@ button.pri,.btn.pri{background:var(--acc);color:#05121f;font-weight:600}
 .mlbl{position:absolute;transform:translate(-50%,-50%);background:#111418;border:2px solid;border-radius:8px;padding:2px 7px;font-size:13px;font-weight:700;white-space:nowrap;cursor:pointer;color:#e8ecf0}
 .mlbl.sel{background:#e8ecf0;color:#111418}
 details{margin-top:8px}summary{color:var(--acc);cursor:pointer;font-size:14px}
+.mctl{margin:10px;display:flex;flex-direction:column;gap:6px}
+.mctl button{padding:8px 10px;font-size:14px;font-weight:600;background:#1b2026ee;border:1px solid var(--line);box-shadow:0 2px 6px #0008}
+.mctl button.on{background:var(--acc);color:#05121f}
+#offr{position:absolute;left:50%;top:10px;transform:translateX(-50%);background:var(--bad);color:#fff;font-weight:700;padding:6px 10px;border-radius:8px;z-index:5;display:none}
 </style>
 </head>
 <body>
@@ -107,6 +111,7 @@ details{margin-top:8px}summary{color:var(--acc);cursor:pointer;font-size:14px}
 </section>
 <div id="pend"></div>
 <div id="verdict"></div>
+<div style="position:relative"><div id="offr">Rotanın dışındasın</div></div>
 <div id="map">API anahtarını ⚙︎ ayarlardan gir</div>
 <div id="msg"></div>
 <div class="cards" id="cards"></div>
@@ -201,7 +206,7 @@ const store={get(k,d){try{const v=localStorage.getItem('rk_'+k);return v==null?d
 const S={key:store.get('key',''),thr:store.get('thr',10),emis:store.get('emis','GASOLINE'),vias:store.get('vias',[]),
          from:store.get('from',''),to:store.get('to',''),wmax:store.get('wmax',2),auton:store.get('auton',2),
          tolls:store.get('tolls',1),lim_r:store.get('lim_r',900),lim_m:store.get('lim_m',9000),lim_p:store.get('lim_p',9000),
-         fromP:store.get('fromP',null),toP:store.get('toP',null),tp:store.get('tp',null),hw:store.get('hw',null),hwv:store.get('hwv',0),navgo:store.get('navgo',0),wpmax:store.get('wpmax',9),favs:store.get('favs',[]),autorun:store.get('autorun',1),voice:store.get('voice',1)};
+         fromP:store.get('fromP',null),toP:store.get('toP',null),tp:store.get('tp',null),hw:store.get('hw',null),hwv:store.get('hwv',0),navgo:store.get('navgo',0),traffic:store.get('traffic',1),wpmax:store.get('wpmax',9),favs:store.get('favs',[]),autorun:store.get('autorun',1),voice:store.get('voice',1)};
 // Otomobil (1. sınıf), 1 Temmuz 2026 tarifesi. dir: null=her yön, 90=yalnız doğuya (Avrupa→Anadolu), 270=yalnız batıya (Anadolu→Avrupa)
 if(!S.tp)S.tp=[
  {name:'15 Temmuz Köprüsü',lat:41.0453,lng:29.0343,price:59,dir:270,v:2,r:300,on:true},
@@ -293,7 +298,7 @@ function why(m){m=String(m||'');
   if(/Failed to fetch|NetworkError|Load failed/i.test(m))return 'İstek gönderilemedi: internet yok ya da anahtarın web sitesi kısıtı bu adrese izin vermiyor.';
   return m.slice(0,160);}
 function msg(t,err){$('#msg').textContent=t||'';$('#msg').className=err?'err':'';}
-function save(){['key','thr','emis','vias','wmax','auton','tolls','lim_r','lim_m','lim_p','fromP','toP','tp','hw','hwv','navgo','wpmax','favs','autorun','voice'].forEach(k=>store.set(k,S[k]));}
+function save(){['key','thr','emis','vias','wmax','auton','tolls','lim_r','lim_m','lim_p','fromP','toP','tp','hw','hwv','navgo','traffic','wpmax','favs','autorun','voice'].forEach(k=>store.set(k,S[k]));}
 const fmtMin=s=>(s/60).toFixed(1)+' dk', fmtKm=m=>(m/1000).toFixed(1)+' km';
 const fmtTL=v=>isNaN(v)?'? ₺':(Math.round(v*100)/100).toLocaleString('tr-TR')+' ₺';
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -471,6 +476,18 @@ function loadMaps(){
       if(addMode==='via'){S.vias.push(Object.assign({name:'Nokta '+(S.vias.length+1),on:true},ll));msg('Ara nokta eklendi; adını ayarlardan değiştirebilirsin.');}
       else{S.tp.push(Object.assign({name:'Ücretli nokta '+(S.tp.length+1),price:0,dir:null,r:150,on:true},ll));msg('Ücretli nokta eklendi; ayarlardan adını ve fiyatını gir.');}
       setAdd(addMode);save();renderSettings();if(R.length)render();});
+    // Canlı trafik katmanı (harita yüklemesine dahil, ek istek yok) ve canlı konum
+    trafficLayer=new google.maps.TrafficLayer();if(S.traffic)trafficLayer.setMap(map);
+    const box=document.createElement('div');box.className='mctl';
+    box.innerHTML='<button id="btTraffic">Trafik</button><button id="btLive">Canlı</button><button id="btFollow" title="Konumuma ortala">◎</button>';
+    map.controls[google.maps.ControlPosition.TOP_RIGHT].push(box);
+    box.addEventListener('click',e=>{const id=e.target.id;
+      if(id==='btTraffic'){S.traffic=S.traffic?0:1;save();trafficLayer.setMap(S.traffic?map:null);}
+      if(id==='btLive'){liveOn?liveStop():liveStart();}
+      if(id==='btFollow'){follow=true;if(meMarker)map.panTo(meMarker.getPosition());}
+      ctlState();});
+    map.addListener('dragstart',()=>{follow=false;ctlState();});
+    setTimeout(ctlState,0);
     drawViaMarkers();if(R.length)drawAll();};
   window.gm_authFailure=()=>msg('Google Maps anahtarı reddedildi (Maps JavaScript API açık mı, alan adı kısıtı doğru mu?)',1);
   const sc=document.createElement('script');
@@ -491,6 +508,26 @@ function tollShort(t){return !t.has?'0 ₺':t.known?(t.src==='tahmin'?'≈':'')+
 function addLabels(idx){idx.forEach(i=>{const x=R[i];mkLabel(labelPos(i),`${x.label} · ${(x.eff/60).toFixed(0)} dk · ${tollShort(x.toll)}`,x.color,i===sel,
   ()=>{sel=i;render();if(lastView.i==null)drawAll();else showDiff(lastView.i,lastView.k,true);});});}
 let lastView={i:null,k:null};
+// ---------- Canlı konum ----------
+let trafficLayer=null,liveOn=false,watchId=null,meMarker=null,meCircle=null,follow=true,wake=null;
+function ctlState(){const t=document.getElementById('btTraffic'),l=document.getElementById('btLive'),f=document.getElementById('btFollow');
+  if(t)t.classList.toggle('on',!!S.traffic);if(l)l.classList.toggle('on',liveOn);if(f){f.style.display=liveOn?'':'none';f.classList.toggle('on',follow);}}
+async function keepAwake(){try{if(liveOn&&'wakeLock' in navigator&&!document.hidden)wake=await navigator.wakeLock.request('screen');}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&liveOn)keepAwake();});
+function liveStart(){if(!navigator.geolocation){msg('Konum desteklenmiyor',1);return;}
+  liveOn=true;follow=true;keepAwake();ctlState();
+  watchId=navigator.geolocation.watchPosition(p=>{const pos={lat:p.coords.latitude,lng:p.coords.longitude};myPos=pos;
+      if(!meMarker){meMarker=new google.maps.Marker({map,zIndex:1000,icon:{path:google.maps.SymbolPath.CIRCLE,scale:8,fillColor:'#4285f4',fillOpacity:1,strokeColor:'#fff',strokeWeight:3}});
+        meCircle=new google.maps.Circle({map,strokeOpacity:0,fillColor:'#4285f4',fillOpacity:0.15,clickable:false});}
+      meMarker.setPosition(pos);meCircle.setCenter(pos);meCircle.setRadius(p.coords.accuracy||0);
+      if(follow){map.panTo(pos);if(map.getZoom()<15)map.setZoom(16);}
+      // seçili rotadan uzaklık (doğruluk payı düşülerek)
+      let off=false;const x=R[sel];if(x){const [px,py]=proj(pos.lat,pos.lng),n=nearestAny(x.g,px,py);off=n.d-(p.coords.accuracy||0)>150;}
+      $('#offr').style.display=off?'block':'none';},
+    e=>{msg('Canlı konum alınamadı: '+e.message,1);liveStop();},{enableHighAccuracy:true,maximumAge:2000,timeout:20000});}
+function liveStop(){liveOn=false;if(watchId!=null)navigator.geolocation.clearWatch(watchId);watchId=null;
+  if(meMarker){meMarker.setMap(null);meCircle.setMap(null);meMarker=meCircle=null;}
+  $('#offr').style.display='none';try{if(wake)wake.release();}catch(e){}wake=null;ctlState();}
 function clearOv(){overlays.forEach(o=>o.setMap(null));overlays=[];}
 function line(path,color,w,op,z){const p=new google.maps.Polyline({path,strokeColor:color,strokeWeight:w,strokeOpacity:op,zIndex:z||1,map});overlays.push(p);return p;}
 function dot(pos,color){const m=new google.maps.Marker({position:pos,map,icon:{path:google.maps.SymbolPath.CIRCLE,scale:6,fillColor:color,fillOpacity:1,strokeColor:'#000',strokeWeight:1}});overlays.push(m);}
