@@ -398,11 +398,19 @@ $('#swap').onclick=()=>{const a=P.from,b=P.to;setPlace('from',b);setPlace('to',a
 let myPos=null;
 function maybeAuto(){if(autoDone)return;autoDone=true;
   if(!S.key||!P.to||!P.from)return;if(!forceAuto&&(!S.autorun||store.get('pend',null)))return;run();}
-function locate(force){if(!navigator.geolocation){if(force)msg('Konum desteklenmiyor',1);else maybeAuto();return;}
+// Önceki oturumdan kalan "Konumum" koordinatı eskidir: taze konum gelene kadar kullanılmaz.
+if(P.from&&P.from.me)P.from.stale=true;
+const GEOERR={1:'konum izni yok. Android Auto programında açtıysan o programın Android ayarlarından (Ayarlar > Uygulamalar > program > İzinler) konum iznini aç. Program web sayfalarına konum vermiyorsa "Nereden"e dokunup favorilerden seç.',
+  2:'konum bulunamadı (GPS kapalı ya da sinyal yok).',3:'konum zamanında gelmedi.'};
+function geoFail(why){if(P.from&&P.from.me)setPlace('from',null);
+  msg('Konum alınamadı: '+why,1);}
+function locate(force){
+  if(!navigator.geolocation||!window.isSecureContext){geoFail('bu tarayıcı/program sayfaya konum vermiyor. "Nereden"e dokunup favorilerden ya da adres yazarak seç.');if(!force)maybeAuto();return;}
   if(force)msg('Konum alınıyor…');
-  navigator.geolocation.getCurrentPosition(p=>{myPos={lat:p.coords.latitude,lng:p.coords.longitude};
+  let done=false;const guard=setTimeout(()=>{if(done)return;done=true;geoFail(GEOERR[3]+' Program konum isteğine yanıt vermiyor olabilir; "Nereden"e favori seç.');if(!force)maybeAuto();},15000);
+  navigator.geolocation.getCurrentPosition(p=>{if(done)return;done=true;clearTimeout(guard);myPos={lat:p.coords.latitude,lng:p.coords.longitude};
       if(force||!P.from||P.from.me)setPlace('from',{text:'📍 Konumum',lat:myPos.lat,lng:myPos.lng,me:true});if(force)msg('');else maybeAuto();},
-    e=>{if(force)msg('Konum alınamadı: '+e.message,1);else maybeAuto();},{enableHighAccuracy:true,timeout:10000,maximumAge:60000});}
+    e=>{if(done)return;done=true;clearTimeout(guard);geoFail(GEOERR[e.code]||e.message);if(!force)maybeAuto();},{enableHighAccuracy:true,timeout:12000,maximumAge:60000});}
 $('#loc').onclick=()=>locate(true);
 
 // ---------- Adres önerileri (Places API (New) Autocomplete) ----------
@@ -451,10 +459,14 @@ function attachAC(which){
     },350);});
   // dokunma: blur'dan önce yakalamak için pointerdown
   const pick=e=>{const it=e.target.closest('.aci[data-i]');if(!it)return;e.preventDefault();
-    setPlace(which,box._sug[+it.dataset.i].place);box.innerHTML='';inp.blur();};
+    const sg=box._sug[+it.dataset.i];box.innerHTML='';inp.blur();if(sg.me){locate(true);return;}setPlace(which,sg.place);};
   box.addEventListener('pointerdown',pick);box.addEventListener('click',pick);
   inp.addEventListener('blur',()=>setTimeout(()=>{box.innerHTML='';},400));
-  inp.addEventListener('focus',()=>{if(P[which]&&P[which].me)inp.select();});
+  inp.addEventListener('focus',()=>{if(P[which]&&P[which].me)inp.select();
+    if(inp.value&&!(P[which]&&P[which].me))return;
+    const it=[];if(which==='from')it.push({main:'📍 Konumumu kullan',sec:'Telefonun/programın konumu',me:true});
+    S.favs.forEach(f=>it.push({main:'★ '+f.name,sec:f.p.text,place:f.p}));
+    box._sug=it;box.innerHTML=it.map((s,i)=>`<div class="aci" data-i="${i}"><b>${esc(s.main)}</b><br><span>${esc(s.sec)}</span></div>`).join('');});
 }
 attachAC('from');attachAC('to');
 
@@ -579,6 +591,7 @@ async function compute(o,d,mod,alt,via,stops){
 $('#go').onclick=run;
 async function run(){
   if(!S.key){$('#set').classList.add('on');msg('Önce API anahtarını gir.',1);return;}
+  if(P.from&&P.from.me&&P.from.stale){msg('Konum henüz alınmadı. 📍 düğmesine bas ya da "Nereden"e favori/adres seç.',1);return;}
   if(!P.from||!P.to){msg('Nereden ve nereye gir.',1);return;}
   msg('Adresler çözülüyor…');placesErr='';
   for(const w of ['from','to']){if(!(await resolvePlace(w))){msg((w==='to'?'Varış':'Başlangıç')+' adresi bulunamadı: "'+P[w].text+'". Daha açık yaz ya da listeden seç.',1);return;}}

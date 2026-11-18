@@ -113,7 +113,8 @@ function keyForm(p){const k=keyOf(p);
     `<div class="row"><input id="pkeyin" placeholder="${esc(p.name)} API anahtarı"><button id="pkeysave" class="pri">Kaydet</button></div>
      <div class="hint">Ücretsiz anahtar: <a href="${p.signup}" target="_blank" rel="noopener" style="color:var(--acc)">${esc(p.signup.replace('https://',''))}</a>. Kart bilgisi ekleme: ücretsiz planda sınır aşılınca istek reddedilir, ücret çıkmaz. Uygulama ayrıca günlük sınırın altında kalır.</div>`);}
 document.getElementById('pkey').addEventListener('click',e=>{const p=pv();
-  if(e.target.id==='pkeysave'){const v=$('#pkeyin').value.trim();if(!v)return;store.set(p.keyName,v);cache={};openProv();}
+  if(e.target.id==='pkeysave'){const v=$('#pkeyin').value.trim();if(!v)return;store.set(p.keyName,v);cache={};
+    if(p.custom&&yLoad){location.reload();return;}openProv();}
   if(e.target.id==='pkeyedit'){e.preventDefault();store.set(p.keyName,'');keyForm(p);}});
 document.getElementById('prefresh').addEventListener('click',()=>{delete cache[tab];openProv(true);});
 
@@ -182,11 +183,11 @@ let yLoad=null,yMap=null,yMR=null,yTraffic=null;
 function loadYandex(k){if(yLoad)return yLoad;
   yLoad=new Promise((res,rej)=>{const s=document.createElement('script');
     s.src='https://api-maps.yandex.ru/2.1/?lang=tr_TR&apikey='+encodeURIComponent(k);
-    s.onload=()=>window.ymaps?ymaps.ready(res):rej(new Error('Yandex API açılmadı'));
+    s.onload=()=>window.ymaps?ymaps.ready(res,e=>{yLoad=null;rej(new Error('Yandex API başlatılamadı: '+((e&&e.message)||'anahtar geçersiz olabilir')));}):(yLoad=null,rej(new Error('Yandex API açılmadı: anahtar geçersiz ya da bu siteye izinli değil')));
     s.onerror=()=>{yLoad=null;rej(new Error('Yandex API yüklenemedi (anahtar ya da ağ)'));};document.head.appendChild(s);});
   return yLoad;}
 async function openYandex(force){const k=keyOf(PROV.yandex);
-  try{await loadYandex(k);}catch(e){pmsg(e.message,1);return;}
+  pmsg('Yandex yükleniyor…');try{await loadYandex(k);}catch(e){pmsg(e.message,1);return;}
   if(!yMap){yMap=new ymaps.Map('ymap',{center:[41.01,28.97],zoom:10,controls:['zoomControl','trafficControl','geolocationControl']},{suppressMapOpenBlock:true});
     yTraffic=yMap.controls.get('trafficControl');try{yTraffic.state.set('trafficShown',true);}catch(e){}}
   setTimeout(()=>yMap.container.fitToViewport(),50);
@@ -202,8 +203,11 @@ async function openYandex(force){const k=keyOf(PROV.yandex);
   yMR=new ymaps.multiRouter.MultiRoute({referencePoints:[[a.lat,a.lng],[b.lat,b.lng]],params:{routingMode:'auto',avoidTrafficJams:true,results:3}},
     {boundsAutoApply:true,wayPointVisible:true,routeActiveStrokeWidth:7,routeStrokeWidth:4});
   yMap.geoObjects.add(yMR);
-  yMR.model.events.add('requestfail',ev=>{let m='';try{m=ev.get('error').message;}catch(e){}pmsg('Yandex rota vermedi'+(m?': '+m:''),1);});
-  yMR.model.events.add('requestsuccess',()=>{const out=[];let yi=0;
+  let answered=false;
+  const tmo=setTimeout(()=>{if(!answered)pmsg('Yandex 15 sn içinde rota vermedi. Yeni anahtar henüz etkinleşmemiş olabilir (birkaç dakika sürebilir) ya da anahtar bu siteye izinli değil.',1);},15000);
+  yMR.model.events.add('requestfail',ev=>{answered=true;clearTimeout(tmo);let m='';try{const er=ev.get('error');m=(er&&(er.message||er.status||String(er)))||'';}catch(e){}
+    pmsg('Yandex rota vermedi'+(m?': '+m:'')+'. Anahtarın "JavaScript API ve HTTP Geocoder" anahtarı olduğundan ve site izninde mtnmrtdnz-g.github.io bulunduğundan emin ol.',1);});
+  yMR.model.events.add('requestsuccess',()=>{answered=true;clearTimeout(tmo);const out=[];let yi=0;
     yMR.getRoutes().each(rt=>{const pr=rt.properties.getAll(),pts=[];
       rt.getPaths().each(path=>{let cs=[];try{cs=path.geometry.getCoordinates();}catch(e){}
         if(!cs||!cs.length){try{path.getSegments().each(sg=>{sg.geometry.getCoordinates().forEach(q=>cs.push(q));});}catch(e){}}
