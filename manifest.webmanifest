@@ -1,6 +1,6 @@
 {
-  "name": "Rota Karşılaştır",
-  "short_name": "Rota",
+  "name": "metoban",
+  "short_name": "metoban",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
@@ -13,13 +13,19 @@
       "src": "icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "share_target": {
@@ -32,7 +38,7 @@
     }
   },
   "id": "./",
-  "description": "Google, Yandex, TomTom, HERE ve OSM rotalarını süre ve ücrete göre karşılaştırır.",
+  "description": "metoban navigasyon: Google, Yandex, TomTom, HERE ve OSM rotalarını süre ve ücrete göre karşılaştırır.",
   "categories": [
     "navigation",
     "travel"

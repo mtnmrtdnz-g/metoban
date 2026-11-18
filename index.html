@@ -3,10 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Rota Karşılaştır</title>
+<title>metoban</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#111418">
-<link rel="icon" href="icon-192.png">
+<link rel="icon" href="mark.svg" type="image/svg+xml"><link rel="icon" href="icon-192.png" type="image/png">
+<meta name="apple-mobile-web-app-title" content="metoban"><meta name="application-name" content="metoban">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <style>
@@ -71,13 +72,19 @@ details{margin-top:8px}summary{color:var(--acc);cursor:pointer;font-size:14px}
 .leaflet-tooltip{background:#111418;color:#e8ecf0;border:1px solid #2a313a;font-weight:700}
 #pmap,#ymap{position:relative;z-index:0}
 header{z-index:1100}
+.brand{display:flex;align-items:center;gap:8px;height:32px}
+.brand img{width:30px;height:30px;background:#eef3f9;border-radius:8px;padding:2px}
+.brand b{font-size:20px;letter-spacing:.3px;color:#e8ecf0}
+.brand span{font-size:12px;color:var(--mut);margin-top:4px}
+.brand button{margin-left:auto;padding:6px 10px}
 </style>
 </head>
 <body>
 <header>
+  <div class="brand"><img src="mark.svg" alt=""><b>metoban</b><span>navigasyon</span><button id="gear" title="Ayarlar">⚙︎</button></div>
   <div class="row"><div class="acw"><input id="from" placeholder="Nereden" autocomplete="off"></div><button id="loc" title="Konumum">📍</button></div>
   <div class="row"><div class="acw"><input id="to" placeholder="Nereye" autocomplete="off"></div><button id="swap" title="Ters çevir">⇅</button></div>
-  <div class="row"><button class="pri" id="go" style="flex:1">Rotaları getir</button><button id="gear">⚙︎</button></div>
+  <div class="row"><button class="pri" id="go" style="flex:1">Rotaları getir</button></div>
   <div class="favs" id="favs"></div>
   <div class="tabs" id="tabs"><button data-t="google" class="on">Google</button><button data-t="yandex">Yandex</button><button data-t="tomtom">TomTom</button><button data-t="here">HERE</button><button data-t="osm">OSM</button></div>
 </header>
