@@ -77,7 +77,7 @@ details{margin-top:8px}summary{color:var(--acc);cursor:pointer;font-size:14px}
   <div class="row"><div class="acw"><input id="to" placeholder="Nereye" autocomplete="off"></div><button id="swap" title="Ters çevir">⇅</button></div>
   <div class="row"><button class="pri" id="go" style="flex:1">Rotaları getir</button><button id="gear">⚙︎</button></div>
   <div class="favs" id="favs"></div>
-  <div class="tabs" id="tabs"><button data-t="google" class="on">Google</button><button data-t="tomtom">TomTom</button><button data-t="here">HERE</button><button data-t="osm">OSM</button></div>
+  <div class="tabs" id="tabs"><button data-t="google" class="on">Google</button><button data-t="yandex">Yandex</button><button data-t="tomtom">TomTom</button><button data-t="here">HERE</button><button data-t="osm">OSM</button></div>
 </header>
 <section id="set">
   <label>Google API anahtarı (Maps JavaScript API + Routes API açık olmalı)</label>
@@ -127,7 +127,7 @@ details{margin-top:8px}summary{color:var(--acc);cursor:pointer;font-size:14px}
 </div>
 <div id="tab-prov" style="display:none">
   <div style="padding:8px 10px;display:grid;gap:6px"><div id="pkey"></div></div>
-  <div id="pmap"></div>
+  <div id="pmap"></div><div id="ymap" style="height:45vh;display:none"></div>
   <div class="row" style="padding:6px 10px"><div id="pmsg" style="flex:1;color:var(--mut);font-size:14px"></div><button id="prefresh" style="flex:0">↻</button></div>
   <div class="cards" id="pcards"></div>
 </div>
@@ -642,6 +642,15 @@ async function run(){
 }
 
 // ---------- Kartlar ----------
+// Yandex ile başlatma: Yandex Navigasyon uygulaması (yandexnavi://) seçilen rotayı ara noktalarla (via, durak değil) kurar.
+function navPoints(x){return (x.lock&&(x.lock.state==='ok'||x.lock.state==='partial'))?x.lock.idx.map(k=>x.g.pts[k]):wpFor(x);}
+function yandexUrl(x){const pts=x.g.pts,e=pts[pts.length-1],w=navPoints(x),f=v=>v.toFixed(6);
+  let u='yandexnavi://build_route_on_map?lat_to='+f(e.lat)+'&lon_to='+f(e.lng);
+  if(P.from&&!P.from.me)u+='&lat_from='+f(pts[0].lat)+'&lon_from='+f(pts[0].lng);
+  w.forEach((p,i)=>{u+=`&lat_via_${i}=${f(p.lat)}&lon_via_${i}=${f(p.lng)}`;});return u;}
+function yandexWeb(x){const pts=x.g.pts,e=pts[pts.length-1],w=navPoints(x),c=p=>p.lat.toFixed(6)+','+p.lng.toFixed(6);
+  const list=[(P.from&&!P.from.me)?c(pts[0]):''].concat(w.map(c),[c(e)]);
+  return 'https://yandex.com.tr/maps/?rtt=auto&rtext='+encodeURIComponent(list.join('~'));}
 function navUrl(x,i){
   const enc=v=>encodeURIComponent(v),ll=p=>p.lat.toFixed(6)+','+p.lng.toFixed(6);
   const part=(name,p)=>{if(!p||p.me)return '';if(p.pid)return '&'+name+'='+enc(p.text)+'&'+name+'_place_id='+enc(p.pid);
@@ -740,7 +749,9 @@ function render(){
   const sx=R[sel],other=rec&&sx!==rec;
   $('#verdict').innerHTML=`<div class="vd"><div class="vt">${vt}</div>
     ${other?`<div class="vs">Seçili: <b style="color:${sx.color}">${sx.label}</b> · ${mn(sx.eff/60)} dk · ${tollShort(sx.toll)} <a href="#" id="vback" style="color:var(--acc)">öneriye dön</a></div>`:''}
-    <a class="btn pri nav" data-i="${sel}" href="${navUrl(sx,sel)}" target="_blank" rel="noopener">Navigasyon ▶ ${sx.label}</a><div class="vs">${lockText(sx)}</div></div>`;
+    <div class="acts" style="margin-top:0"><a class="btn pri nav" data-i="${sel}" href="${navUrl(sx,sel)}" target="_blank" rel="noopener" style="flex:2">Google Maps ▶ ${sx.label}</a>
+      <a class="btn ynav nav" data-i="${sel}" href="${yandexUrl(sx)}" style="flex:1">Yandex ▶</a></div>
+    <div class="vs">${lockText(sx)} · <a href="${yandexWeb(sx)}" target="_blank" rel="noopener" style="color:var(--acc)">Yandex Navigasyon yoksa Yandex Haritalar</a></div></div>`;
   if(!spoken){spoken=true;speak(say);}
   if(REVDONE&&R[sel]&&!R[sel].lock)setTimeout(()=>lockRoute(R[sel]),0);
   $('#cards').innerHTML=R.map((x,i)=>{

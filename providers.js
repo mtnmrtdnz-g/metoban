@@ -11,7 +11,7 @@ function loadLeaflet(){if(llReady)return llReady;
   return llReady;}
 
 // ---- günlük kullanım kilidi (ücretsiz planların günlük sınırının altında kalmak için) ----
-const LIM={tomtom:{api:2000,tiles:45000},here:{api:300,tiles:600},osm:{api:500,tiles:3000}};
+const LIM={yandex:{api:500,tiles:1e9},tomtom:{api:2000,tiles:45000},here:{api:300,tiles:600},osm:{api:500,tiles:3000}};
 const dayKey=()=>new Date().toISOString().slice(0,10);
 let USE=null;
 function use(){if(!USE||USE.d!==dayKey()){USE=store.get('puse',null);if(!USE||USE.d!==dayKey())USE={d:dayKey()};}return USE;}
@@ -29,6 +29,7 @@ function hav(a,b){const r=Math.PI/180,dla=(b[0]-a[0])*r,dln=(b[1]-a[1])*r,s=Math
 
 // ---- sağlayıcılar ----
 const PROV={
+ yandex:{name:'Yandex',keyName:'ykey',traffic:true,custom:true,signup:'https://developer.tech.yandex.com/services'},
  tomtom:{name:'TomTom',keyName:'ttkey',traffic:true,signup:'https://developer.tomtom.com/user/register',
    base:k=>'https://api.tomtom.com/map/1/tile/basic/night/{z}/{x}/{y}.png?key='+encodeURIComponent(k),
    flow:k=>'https://api.tomtom.com/traffic/map/4/tile/flow/relative0-dark/{z}/{x}/{y}.png?key='+encodeURIComponent(k),
@@ -117,7 +118,9 @@ document.getElementById('pkey').addEventListener('click',e=>{const p=pv();
 document.getElementById('prefresh').addEventListener('click',()=>{delete cache[tab];openProv(true);});
 
 async function openProv(force){const p=pv();keyForm(p);
+  $('#pmap').style.display=p.custom?'none':'';$('#ymap').style.display=p.custom?'':'none';
   if(p.keyName&&!keyOf(p)){$('#pcards').innerHTML='';pmsg('');return;}
+  if(p.custom)return openYandex(force);
   try{await loadLeaflet();}catch(e){pmsg(e.message,1);return;}
   const k=keyOf(p);
   if(!lmap){lmap=L.map('pmap',{zoomControl:true,attributionControl:true}).setView([41.01,28.97],10);}
@@ -151,7 +154,8 @@ function drawProv(info){const p=pv();
   if(all.length){marks.push(L.circleMarker(all[0],{radius:7,color:'#fff',fillColor:'#4285f4',fillOpacity:1}).addTo(lmap));
     const e=PR[0].pts[PR[0].pts.length-1];marks.push(L.marker(e).addTo(lmap).bindTooltip('Varış'));
     lmap.fitBounds(L.latLngBounds(all),{padding:[30,30]});}
-  const A=PR[0];
+  renderCards(info);}
+function renderCards(info){const p=pv(),A=PR[0];
   $('#pcards').innerHTML=PR.map((x,i)=>{
     const tt=tableToll(x.g);let toll='';
     if(x.price!=null)toll=x.price>0?`<span class="tag bad">Ücretli ${fmtTL(x.price)} (${esc(p.name)})</span>`:'<span class="tag ok">Ücretsiz</span>';
@@ -166,10 +170,52 @@ function drawProv(info){const p=pv();
       ${i>0?`<div class="sub" style="font-size:15px;color:var(--tx)">A'ya göre +${((x.dur-A.dur)/60).toFixed(1)} dk, ${((x.dist-A.dist)/1000>=0?'+':'')}${((x.dist-A.dist)/1000).toFixed(1)} km</div>`:''}
       ${x.delay!=null?`<div class="sub">Trafik gecikmesi: ${x.delay>=60?'+'+Math.round(x.delay/60)+' dk':'yok'}</div>`:'<div class="sub">Trafiksiz tahmin</div>'}
       <div class="sub">${gl}</div>
-      <div class="acts"><a class="btn pri pnav" data-i="${i}" href="${navUrl(x,i+1)}" target="_blank" rel="noopener">Bu yoldan Google Maps ▶</a></div></div>`;}).join('');
+      <div class="acts">${p.custom?`<button class="ysel" data-i="${i}">Haritada göster</button>`:''}<a class="btn pri pnav" data-i="${i}" href="${navUrl(x,i+1)}" target="_blank" rel="noopener">Google Maps ▶</a>
+        <a class="btn pnav" data-i="${i}" href="${yandexUrl(x)}">Yandex ▶</a></div></div>`;}).join('');
   pmsg(`${PR.length} rota (${p.name}). ${info}`);}
-document.getElementById('pcards').addEventListener('click',e=>{const n=e.target.closest('.pnav');if(!n)return;
+document.getElementById('pcards').addEventListener('click',e=>{const ys=e.target.closest('.ysel');if(ys&&yMR){const want=+ys.dataset.i;let k=0;yMR.getRoutes().each(rt=>{if(k++===PR[want]._yi)yMR.setActiveRoute(rt);});return;}
+  const n=e.target.closest('.pnav');if(!n)return;
   const x=PR[+n.dataset.i];try{store.set('pend',{ts:Date.now(),h:new Date().getHours(),pred:x.dur/60,s:samples(x.g),len:x.g.pts[x.g.pts.length-1].d,label:x.label,tags:pv().name});}catch(err){}});
+
+// ---- Yandex: kendi JS API'si (harita + canlı trafik + trafiğe göre rota) ----
+let yLoad=null,yMap=null,yMR=null,yTraffic=null;
+function loadYandex(k){if(yLoad)return yLoad;
+  yLoad=new Promise((res,rej)=>{const s=document.createElement('script');
+    s.src='https://api-maps.yandex.ru/2.1/?lang=tr_TR&apikey='+encodeURIComponent(k);
+    s.onload=()=>window.ymaps?ymaps.ready(res):rej(new Error('Yandex API açılmadı'));
+    s.onerror=()=>{yLoad=null;rej(new Error('Yandex API yüklenemedi (anahtar ya da ağ)'));};document.head.appendChild(s);});
+  return yLoad;}
+async function openYandex(force){const k=keyOf(PROV.yandex);
+  try{await loadYandex(k);}catch(e){pmsg(e.message,1);return;}
+  if(!yMap){yMap=new ymaps.Map('ymap',{center:[41.01,28.97],zoom:10,controls:['zoomControl','trafficControl','geolocationControl']},{suppressMapOpenBlock:true});
+    yTraffic=yMap.controls.get('trafficControl');try{yTraffic.state.set('trafficShown',true);}catch(e){}}
+  setTimeout(()=>yMap.container.fitToViewport(),50);
+  if(!P.from||!P.to){pmsg('Nereden ve nereye gir.');$('#pcards').innerHTML='';return;}
+  const ck=(P.from.text||'')+'|'+(P.to.text||''),c=cache.yandex;
+  if(!force&&c&&c.ck===ck&&Date.now()-c.t<5*60000){PR=c.routes;renderCards(c.info);return;}
+  pmsg('Yandex rotaları hesaplanıyor…');$('#pcards').innerHTML='';
+  const a=await coordOf('from'),b=await coordOf('to');
+  if(!a||!b){pmsg('Adres koordinata çevrilemedi. Listeden bir öneri seç ya da Google sekmesinde bir kez arat.',1);return;}
+  if(!R.length)setOrigin(a.lat,a.lng);
+  if(!pSpend('yandex','api',1)){pmsg('Günlük Yandex rota sınırı doldu ('+usedTxt('yandex')+').',1);return;}
+  if(yMR)yMap.geoObjects.remove(yMR);
+  yMR=new ymaps.multiRouter.MultiRoute({referencePoints:[[a.lat,a.lng],[b.lat,b.lng]],params:{routingMode:'auto',avoidTrafficJams:true,results:3}},
+    {boundsAutoApply:true,wayPointVisible:true,routeActiveStrokeWidth:7,routeStrokeWidth:4});
+  yMap.geoObjects.add(yMR);
+  yMR.model.events.add('requestfail',ev=>{let m='';try{m=ev.get('error').message;}catch(e){}pmsg('Yandex rota vermedi'+(m?': '+m:''),1);});
+  yMR.model.events.add('requestsuccess',()=>{const out=[];let yi=0;
+    yMR.getRoutes().each(rt=>{const pr=rt.properties.getAll(),pts=[];
+      rt.getPaths().each(path=>{let cs=[];try{cs=path.geometry.getCoordinates();}catch(e){}
+        if(!cs||!cs.length){try{path.getSegments().each(sg=>{sg.geometry.getCoordinates().forEach(q=>cs.push(q));});}catch(e){}}
+        cs.forEach(q=>pts.push([q[0],q[1]]));});
+      const v=o=>o&&o.value!=null?o.value:0;
+      out.push({pts,dur:v(pr.durationInTraffic)||v(pr.duration),dist:v(pr.distance),delay:Math.max(0,v(pr.durationInTraffic)-v(pr.duration)),
+        tollM:pr.hasTolls===true?1:(pr.hasTolls===false?0:null),price:null,_yi:yi++});});
+    if(!out.length){pmsg('Yandex bu iki nokta arasında rota bulamadı.',1);return;}
+    out.sort((x,y)=>x.dur-y.dur);
+    PR=out.filter(x=>x.pts.length>1).map((x,i)=>Object.assign(x,{label:String.fromCharCode(65+i),color:COLORS[i%COLORS.length],g:geomFrom(x.pts),via:null,lock:null,tags:['Yandex']}));
+    if(!PR.length){pmsg('Yandex rotasının çizgisi okunamadı.',1);return;}
+    const info=`Başlangıç: ${a.src} · Varış: ${b.src}`;cache.yandex={ck,t:Date.now(),routes:PR,info};renderCards(info);});}
 
 // açılışta son sekme
 const last=(()=>{try{return JSON.parse(localStorage.getItem('rk_tab')||'"google"');}catch(e){return 'google';}})();
