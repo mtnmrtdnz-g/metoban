@@ -1,14 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="90 60 400 400">
-  <defs>
-    <linearGradient id="arrm" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#2a63a8"/><stop offset="1" stop-color="#5aa9ef"/></linearGradient>
-    <linearGradient id="roadm" gradientUnits="userSpaceOnUse" x1="0" y1="110" x2="0" y2="430"><stop offset="0" stop-color="#26457a"/><stop offset="1" stop-color="#1a3159"/></linearGradient>
-  </defs>
-  <g fill="none" stroke-linejoin="round">
-    <path d="M128 424 L128 170 Q128 120 172 120 Q200 120 218 146 L302 298" stroke="url(#roadm)" stroke-width="58"/>
-    <path d="M128 412 L128 170 Q128 128 172 128 Q196 128 212 152 L290 292" stroke="#fff" stroke-width="5" stroke-dasharray="20 17" stroke-linecap="round"/>
-    <path d="M384 424 L384 196" stroke="url(#roadm)" stroke-width="58"/>
-    <path d="M384 412 L384 232" stroke="#fff" stroke-width="5" stroke-dasharray="20 17" stroke-linecap="round"/>
-    <path d="M214 410 L420 148" stroke="#fff" stroke-width="70"/>
-    <path d="M214 410 L420 148" stroke="url(#arrm)" stroke-width="56"/>
-  </g>
-  <path d="M466 89 L470 190 L363 112 Z" fill="url(#arrm)" stroke="#fff" stroke-width="7" stroke-linejoin="round"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="76 40 390 330"><defs>
+  <linearGradient id="arm" gradientUnits="userSpaceOnUse" x1="96" y1="352" x2="440" y2="70"><stop offset="0" stop-color="#2a62a6"/><stop offset="1" stop-color="#58a6ee"/></linearGradient>
+  <linearGradient id="mgm" gradientUnits="userSpaceOnUse" x1="0" y1="110" x2="0" y2="330"><stop offset="0" stop-color="#28497c"/><stop offset="1" stop-color="#1a3157"/></linearGradient>
+</defs><path d="M116 330 L116 110 L178 110 L256 212 L334 110 L396 110 L396 330 L340 330 L340 196 L256 304 L172 196 L172 330 Z" fill="url(#mgm)"/><g stroke-linejoin="round" fill="none">
+  <path d="M100 338 L392 104" stroke="#fff" stroke-width="54"/>
+  <path d="M100 338 L392 104" stroke="url(#arm)" stroke-width="42"/>
+  <path d="M110.9 329.2 L384 110.5" stroke="#fff" stroke-width="4.5" stroke-dasharray="18 14" stroke-linecap="round"/>
+</g>
+<path d="M440 65 L415 146 L356 72 Z" fill="url(#arm)" stroke="#fff" stroke-width="7" stroke-linejoin="round"/></svg>
