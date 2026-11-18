@@ -30,5 +30,11 @@
       "text": "text",
       "url": "url"
     }
-  }
+  },
+  "id": "./",
+  "description": "Google, Yandex, TomTom, HERE ve OSM rotalarını süre ve ücrete göre karşılaştırır.",
+  "categories": [
+    "navigation",
+    "travel"
+  ]
 }
