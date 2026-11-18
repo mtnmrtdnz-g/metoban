@@ -64,6 +64,11 @@ details{margin-top:8px}summary{color:var(--acc);cursor:pointer;font-size:14px}
 .mctl button{padding:8px 10px;font-size:14px;font-weight:600;background:#1b2026ee;border:1px solid var(--line);box-shadow:0 2px 6px #0008}
 .mctl button.on{background:var(--acc);color:#05121f}
 #offr{position:absolute;left:50%;top:10px;transform:translateX(-50%);background:var(--bad);color:#fff;font-weight:700;padding:6px 10px;border-radius:8px;z-index:5;display:none}
+.tabs{display:flex;gap:4px}
+.tabs button{flex:1;padding:8px 4px;font-size:14px;background:transparent;border:1px solid var(--line)}
+.tabs button.on{background:var(--acc);color:#05121f;font-weight:700;border-color:var(--acc)}
+#pmap{height:45vh;background:#0b0d10}
+.leaflet-tooltip{background:#111418;color:#e8ecf0;border:1px solid #2a313a;font-weight:700}
 </style>
 </head>
 <body>
@@ -72,6 +77,7 @@ details{margin-top:8px}summary{color:var(--acc);cursor:pointer;font-size:14px}
   <div class="row"><div class="acw"><input id="to" placeholder="Nereye" autocomplete="off"></div><button id="swap" title="Ters çevir">⇅</button></div>
   <div class="row"><button class="pri" id="go" style="flex:1">Rotaları getir</button><button id="gear">⚙︎</button></div>
   <div class="favs" id="favs"></div>
+  <div class="tabs" id="tabs"><button data-t="google" class="on">Google</button><button data-t="tomtom">TomTom</button><button data-t="here">HERE</button><button data-t="osm">OSM</button></div>
 </header>
 <section id="set">
   <label>Google API anahtarı (Maps JavaScript API + Routes API açık olmalı)</label>
@@ -109,6 +115,7 @@ details{margin-top:8px}summary{color:var(--acc);cursor:pointer;font-size:14px}
   <button id="clrlog">Kayıtları temizle</button>
   <div class="hint">Anahtar, ayarlar ve kayıtlar sadece bu tarayıcıda saklanır.</div>
 </section>
+<div id="tab-google">
 <div id="pend"></div>
 <div id="verdict"></div>
 <div style="position:relative"><div id="offr">Rotanın dışındasın</div></div>
@@ -117,6 +124,13 @@ details{margin-top:8px}summary{color:var(--acc);cursor:pointer;font-size:14px}
 <div class="cards" id="cards"></div>
 <div style="padding:0 10px 30px;display:none" id="repwrap"><button id="repbtn" style="width:100%">Hata raporu kopyala</button>
   <textarea id="reptxt" readonly style="display:none;width:100%;height:160px;margin-top:8px;background:var(--card);color:var(--tx);border:1px solid var(--line);border-radius:8px;font:12px ui-monospace,monospace"></textarea></div>
+</div>
+<div id="tab-prov" style="display:none">
+  <div style="padding:8px 10px;display:grid;gap:6px"><div id="pkey"></div></div>
+  <div id="pmap"></div>
+  <div class="row" style="padding:6px 10px"><div id="pmsg" style="flex:1;color:var(--mut);font-size:14px"></div><button id="prefresh" style="flex:0">↻</button></div>
+  <div class="cards" id="pcards"></div>
+</div>
 
 <script id="core">
 // ---------- Geometri çekirdeği ----------
@@ -796,5 +810,6 @@ $('#cards').onclick=e=>{
 renderSettings();renderPend();loadMaps();locate(false);
 if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
+<script src="providers.js"></script>
 </body>
 </html>
