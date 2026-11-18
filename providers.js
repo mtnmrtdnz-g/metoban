@@ -104,7 +104,8 @@ function pmsg(t,err){const el=$('#pmsg');el.textContent=t||'';el.style.color=err
 function showTab(t){tab=t;document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
   $('#tab-google').style.display=t==='google'?'':'none';$('#tab-prov').style.display=t==='google'?'none':'';
   try{localStorage.setItem('rk_tab',JSON.stringify(t));}catch(e){}
-  if(t!=='google')openProv();}
+  if(t!=='google')openProv();else if(window.onGoogleTab)setTimeout(window.onGoogleTab,30);
+  document.querySelectorAll('.ac').forEach(b=>b.innerHTML='');}
 document.getElementById('tabs').addEventListener('click',e=>{const b=e.target.closest('button[data-t]');if(b)showTab(b.dataset.t);});
 
 function keyForm(p){const k=keyOf(p);
@@ -156,15 +157,18 @@ function drawProv(info){const p=pv();
     const e=PR[0].pts[PR[0].pts.length-1];marks.push(L.marker(e).addTo(lmap).bindTooltip('Varış'));
     lmap.fitBounds(L.latLngBounds(all),{padding:[30,30]});}
   renderCards(info);}
-function renderCards(info){const p=pv(),A=PR[0];
+function withFreshGoogle(f){const fresh=R.length&&RKEY===placeKey();if(fresh)return f(true);
+  const sR=R,sD=DEF,sV=REV;R=[];DEF=null;REV=null;try{return f(false);}finally{R=sR;DEF=sD;REV=sV;}}
+function renderCards(info){return withFreshGoogle(fresh=>renderCards0(info,fresh));}
+function renderCards0(info,fresh){const p=pv(),A=PR[0];
   $('#pcards').innerHTML=PR.map((x,i)=>{
     const tt=tableToll(x.g);let toll='';
     if(x.price!=null)toll=x.price>0?`<span class="tag bad">Ücretli ${fmtTL(x.price)} (${esc(p.name)})</span>`:'<span class="tag ok">Ücretsiz</span>';
     else if(x.tollM)toll=`<span class="tag bad">Ücretli yol ${p.name==='TomTom'?(x.tollM/1000).toFixed(1)+' km':''}</span>`+(tt.sum?`<span class="tag">köprü/tünel ${fmtTL(tt.sum)}</span>`:'');
     else if(x.tollM===0)toll='<span class="tag ok">Ücretsiz</span>';
     else if(tt.sum)toll=`<span class="tag bad">köprü/tünel ${fmtTL(tt.sum)}</span>`;
-    const tw=R.length?googleTwin(x.g):null;
-    const gl=!R.length?'Google sekmesinde aratırsan aynı yolu orada da gösteririm.':
+    const tw=fresh?googleTwin(x.g):null;
+    const gl=!fresh?'Google karşılaştırması için bu adresi Google sekmesinde de arat.':
       tw.off<500?`Google'da da var: <b style="color:${tw.y.color}">${tw.y.label}</b> rotası, Google ${Math.round(tw.y.eff/60)} dk · ${esc(p.name)} ${Math.round(x.dur/60)} dk (fark ${Math.round((x.dur-tw.y.eff)/60)>=0?'+':''}${Math.round((x.dur-tw.y.eff)/60)} dk)`:
       `Google'ın listesinde yok (${(tw.own/1000).toFixed(1)} km'si Google'ın en yakın rotası ${tw.y.label}'dan farklı)`;
     return `<div class="card" style="--c:${x.color}"><div class="h"><span class="lbl">${x.label}</span><span class="big">${(x.dur/60).toFixed(0)} dk</span><span>${fmtKm(x.dist)}</span>${toll}${i===0?'<span class="tag">en hızlı</span>':''}</div>
@@ -224,5 +228,6 @@ async function openYandex(force){const k=keyOf(PROV.yandex);
 // açılışta son sekme
 const last=(()=>{try{return JSON.parse(localStorage.getItem('rk_tab')||'"google"');}catch(e){return 'google';}})();
 if(PROV[last])setTimeout(()=>showTab(last),0);
+window.PROVTAB=()=>tab;window.PROVREFRESH=()=>{delete cache[tab];return openProv(true);};
 window.PROVTEST={decodeFlex,geomFrom,googleTwin,PROV};
 })();
