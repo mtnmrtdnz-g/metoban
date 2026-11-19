@@ -35,7 +35,13 @@ button.pri,.btn.pri{background:var(--acc);color:#05121f;font-weight:600}
 .math{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;margin-top:6px;white-space:pre-wrap}
 .acts{display:flex;gap:6px;margin-top:10px}.acts>*{flex:1}
 .div{margin-top:8px;border-top:1px dashed var(--line);padding-top:8px;font-size:14px}
-#set{display:none;padding:10px;border-bottom:1px solid var(--line);gap:8px}
+#set{display:none;position:fixed;inset:0;z-index:3000;background:var(--bg);overflow-y:auto;overflow-x:hidden;padding:0 12px 60px;gap:8px;align-content:start;-webkit-overflow-scrolling:touch}
+#set *{max-width:100%}
+#set input,#set select{min-width:0}
+#set .via,#set .row{flex-wrap:wrap}
+.sethead{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:space-between;background:var(--bg);padding:12px 0 10px;border-bottom:1px solid var(--line)}
+.sethead b{font-size:18px}
+html,body{overflow-x:hidden}
 #set.on{display:grid}
 #set label{color:var(--mut);font-size:13px}
 .via{display:flex;gap:6px;align-items:center}
@@ -90,6 +96,7 @@ header{z-index:1100}
   <div class="tabs" id="tabs"><button data-t="google" class="on">Google</button><button data-t="yandex">Yandex</button><button data-t="tomtom">TomTom</button><button data-t="here">HERE</button><button data-t="osm">OSM</button></div>
 </header>
 <section id="set">
+  <div class="sethead"><b>Ayarlar</b><button id="setclose" class="pri">Kapat ✕</button></div>
   <label>Google API anahtarı (Maps JavaScript API + Routes API açık olmalı)</label>
   <input id="key" placeholder="AIza...">
   <label>Zaman değeri: 1 dakika kaç ₺ eder? (bunun üstünde ₺/dk isteyen ücretli yol önerilmez)</label>
@@ -103,6 +110,12 @@ header{z-index:1100}
     <select id="voice"><option value="1">Ses açık</option><option value="0">Ses kapalı</option></select></div>
   <label>Favori hedefler</label>
   <div id="favlist"></div>
+  <label>Daha yavaş ama daha ucuz rotalar</label>
+  <select id="hcheap"><option value="show">Hep göster</option><option value="slow">Eşikten fazla yavaşsa gizle</option></select>
+  <label>Daha yavaş ve daha pahalı rotalar (ör. km'si daha az olabilir)</label>
+  <select id="hdom"><option value="slow">Eşikten fazla yavaşsa gizle</option><option value="show">Hep göster</option><option value="hide">Hep gizle</option></select>
+  <label>Gizleme eşiği: en hızlıdan yüzde kaç yavaş? (%)</label>
+  <input id="hpct" type="number" min="0" step="5">
   <label>Dolambaç eşiği (manevra/km): üstündeki rotalar önerilmez, otomatik adaylar elenir</label>
   <input id="wmax" type="number" min="0" step="0.1">
   <label>Otomatik aday sayısı (her biri ek bir API çağrısı)</label>
@@ -230,7 +243,7 @@ const store={get(k,d){try{const v=localStorage.getItem('rk_'+k);return v==null?d
 const S={key:store.get('key',''),thr:store.get('thr',10),emis:store.get('emis','GASOLINE'),vias:store.get('vias',[]),
          from:store.get('from',''),to:store.get('to',''),wmax:store.get('wmax',2),auton:store.get('auton',2),
          tolls:store.get('tolls',1),lim_r:store.get('lim_r',900),lim_m:store.get('lim_m',9000),lim_p:store.get('lim_p',9000),
-         fromP:store.get('fromP',null),toP:store.get('toP',null),tp:store.get('tp',null),hw:store.get('hw',null),hwv:store.get('hwv',0),navgo:store.get('navgo',0),traffic:store.get('traffic',1),wpmax:store.get('wpmax',9),favs:store.get('favs',[]),autorun:store.get('autorun',1),voice:store.get('voice',1)};
+         fromP:store.get('fromP',null),toP:store.get('toP',null),tp:store.get('tp',null),hw:store.get('hw',null),hwv:store.get('hwv',0),navgo:store.get('navgo',0),hcheap:store.get('hcheap','show'),hdom:store.get('hdom','slow'),hpct:store.get('hpct',20),traffic:store.get('traffic',1),wpmax:store.get('wpmax',9),favs:store.get('favs',[]),autorun:store.get('autorun',1),voice:store.get('voice',1)};
 // Otomobil (1. sınıf), 1 Temmuz 2026 tarifesi. dir: null=her yön, 90=yalnız doğuya (Avrupa→Anadolu), 270=yalnız batıya (Anadolu→Avrupa)
 if(!S.tp)S.tp=[
  {name:'15 Temmuz Köprüsü',lat:41.0453,lng:29.0343,price:59,dir:270,v:2,r:300,on:true},
@@ -326,7 +339,7 @@ function why(m){m=String(m||'');
   if(/Failed to fetch|NetworkError|Load failed/i.test(m))return 'İstek gönderilemedi: internet yok ya da anahtarın web sitesi kısıtı bu adrese izin vermiyor.';
   return m.slice(0,160);}
 function msg(t,err){$('#msg').textContent=t||'';$('#msg').className=err?'err':'';}
-function save(){['key','thr','emis','vias','wmax','auton','tolls','lim_r','lim_m','lim_p','fromP','toP','tp','hw','hwv','navgo','traffic','wpmax','favs','autorun','voice'].forEach(k=>store.set(k,S[k]));}
+function save(){['key','thr','emis','vias','wmax','auton','tolls','lim_r','lim_m','lim_p','fromP','toP','tp','hw','hwv','navgo','hcheap','hdom','hpct','traffic','wpmax','favs','autorun','voice'].forEach(k=>store.set(k,S[k]));}
 const fmtMin=s=>(s/60).toFixed(1)+' dk', fmtKm=m=>(m/1000).toFixed(1)+' km';
 const fmtTL=v=>isNaN(v)?'? ₺':(Math.round(v*100)/100).toLocaleString('tr-TR')+' ₺';
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -351,7 +364,7 @@ function renderSettings(){
     <button data-i="${i}" class="tdel">✕</button></div>`).join('')||'<div class="hint">Henüz yok.</div>';
   $('#hws').innerHTML=S.hw.map((w,i)=>`<div class="via"><span class="hint" style="flex:3">${esc(w.name)}</span>
     <input type="number" step="0.05" data-i="${i}" class="hrate" value="${w.rate}" style="max-width:80px"></div>`).join('');
-  $('#navgo').value=String(S.navgo);$('#wpmax').value=String(S.wpmax);$('#autorun').value=String(S.autorun);$('#voice').value=String(S.voice);
+  $('#navgo').value=String(S.navgo);$('#hcheap').value=S.hcheap;$('#hdom').value=S.hdom;$('#hpct').value=S.hpct;$('#wpmax').value=String(S.wpmax);$('#autorun').value=String(S.autorun);$('#voice').value=String(S.voice);
   $('#favlist').innerHTML=S.favs.map((f,i)=>`<div class="via"><input type="text" data-i="${i}" class="fname" value="${esc(f.name)}">
     <span class="hint">${esc(f.p.text).slice(0,40)}</span><button data-i="${i}" class="fdel">✕</button></div>`).join('')||'<div class="hint">Henüz yok. Bir hedef seçip üstteki ☆ Kaydet düğmesine bas.</div>';
   renderFavs();drawViaMarkers();renderLogs();
@@ -367,6 +380,9 @@ $('#favlist').onclick=e=>{if(e.target.classList.contains('fdel')){S.favs.splice(
 $('#hws').onchange=e=>{if(e.target.classList.contains('hrate')){S.hw[+e.target.dataset.i].rate=parseFloat(e.target.value)||0;save();if(R.length)render();}};
 $('#autorun').onchange=e=>{S.autorun=+e.target.value;save();};
 $('#wpmax').onchange=e=>{S.wpmax=+e.target.value;save();if(R.length)render();};
+$('#hcheap').onchange=e=>{S.hcheap=e.target.value;save();};
+$('#hdom').onchange=e=>{S.hdom=e.target.value;save();};
+$('#hpct').onchange=e=>{S.hpct=Math.max(0,parseFloat(e.target.value)||0);save();};
 $('#navgo').onchange=e=>{S.navgo=+e.target.value;save();if(R.length)render();};
 $('#voice').onchange=e=>{S.voice=+e.target.value;save();if(!S.voice&&window.speechSynthesis)speechSynthesis.cancel();};
 function speak(t){if(!S.voice||!window.speechSynthesis||!window.SpeechSynthesisUtterance)return;
@@ -375,7 +391,9 @@ function renderLogs(){
   $('#logs').innerHTML=LOG.length+' kayıt'+LOG.slice(-5).reverse().map(e=>
     `<br>${new Date(e.ts).toLocaleDateString('tr-TR')} ${hhmm(e.ts)} · ${esc(e.tags)} · tahmin ${e.pred.toFixed(1)} → gerçek ${e.act.toFixed(1)} dk (${(e.act/e.pred).toFixed(2)})`).join('');
 }
-$('#gear').onclick=()=>$('#set').classList.toggle('on');
+function setOpen(on){$('#set').classList.toggle('on',on);document.body.style.overflow=on?'hidden':'';}
+$('#gear').onclick=()=>setOpen(!$('#set').classList.contains('on'));
+$('#setclose').onclick=()=>setOpen(false);
 $('#key').onchange=e=>{S.key=e.target.value.trim();save();loadMaps();};
 $('#thr').onchange=e=>{S.thr=parseFloat(e.target.value)||0;save();if(R.length)render();};
 $('#wmax').onchange=e=>{S.wmax=parseFloat(e.target.value)||0;save();if(R.length)render();};
@@ -507,7 +525,7 @@ function loadMaps(){
   if(map||!S.key||window._mapsLoading)return;
   if(!spend('m',1)){msg('Aylık harita yükleme limiti doldu; harita yüklenmedi.',1);return;}
   window._mapsLoading=true;
-  window.initMap=()=>{map=new google.maps.Map($('#map'),{center:{lat:41.01,lng:28.97},zoom:10,disableDefaultUI:true,zoomControl:true,
+  window.initMap=()=>{map=new google.maps.Map($('#map'),{center:{lat:41.01,lng:28.97},zoom:10,gestureHandling:'cooperative',disableDefaultUI:true,zoomControl:true,
       styles:[{elementType:'geometry',stylers:[{color:'#1d2128'}]},{elementType:'labels.text.fill',stylers:[{color:'#9aa4b0'}]},
       {elementType:'labels.text.stroke',stylers:[{color:'#111418'}]},{featureType:'road',elementType:'geometry',stylers:[{color:'#2f3742'}]},
       {featureType:'road.highway',elementType:'geometry',stylers:[{color:'#46505e'}]},{featureType:'water',stylers:[{color:'#0e1a26'}]},
@@ -609,7 +627,7 @@ let RKEY='';const placeKey=()=>(P.from&&P.from.text||'')+'|'+(P.to&&P.to.text||'
 window.onGoogleTab=()=>{if(map){try{google.maps.event.trigger(map,'resize');}catch(e){}if(R.length)drawAll();}};
 $('#go').onclick=goActive;
 async function run(){
-  if(!S.key){$('#set').classList.add('on');msg('Önce API anahtarını gir.',1);return;}
+  if(!S.key){setOpen(true);msg('Önce API anahtarını gir.',1);return;}
   if(P.from&&P.from.me&&P.from.stale){msg('Konum henüz alınmadı. 📍 düğmesine bas ya da "Nereden"e favori/adres seç.',1);return;}
   if(!P.from||!P.to){msg('Nereden ve nereye gir.',1);return;}
   msg('Adresler çözülüyor…');placesErr='';
@@ -661,9 +679,12 @@ async function run(){
   R.forEach(x=>{x.toll=finalToll(x.gtoll,x.g,x.hw);});
   const price=x=>x.toll.known?x.toll.price:Infinity,mine=x=>x.tags.some(t=>S.vias.some(v=>v.name===t));
   const dominated=x=>R.some(y=>y!==x&&y.eff<=x.eff&&price(y)<=price(x)&&(y.eff<x.eff-30||price(y)<price(x)));
-  let keep=R.filter(x=>x===R[0]||mine(x)||!dominated(x));
-  if(keep.length>5){const must=keep.filter(x=>x===R[0]||mine(x)),rest=keep.filter(x=>!must.includes(x));
-    keep=must.concat(rest.slice(0,Math.max(0,5-must.length))).sort((a,b)=>a.eff-b.eff);}
+  // ayarlara göre: hem yavaş hem pahalı (dominated) ve yavaş ama ucuz rotalar için ayrı gizleme kuralı
+  const slow=x=>x.eff>(1+(+S.hpct||0)/100)*R[0].eff;
+  const hide=x=>{if(x===R[0]||mine(x))return false;const m=dominated(x)?S.hdom:S.hcheap;return m==='hide'||(m==='slow'&&slow(x));};
+  let keep=R.filter(x=>!hide(x));
+  if(keep.length>6){const must=keep.filter(x=>x===R[0]||mine(x)),rest=keep.filter(x=>!must.includes(x));
+    keep=must.concat(rest.slice(0,Math.max(0,6-must.length))).sort((a,b)=>a.eff-b.eff);}
   HIDDEN=R.filter(x=>!keep.includes(x));R=keep;const nHidden=HIDDEN.length;
   R.forEach((x,i)=>{x.label=String.fromCharCode(65+i);x.color=COLORS[i%COLORS.length];});
   RKEY=placeKey();render();drawAll();$('#repwrap').style.display='block';
@@ -671,7 +692,7 @@ async function run(){
   REV=null;REVDONE=false;LASTOD={o,d};const myRun=++runId;
   const revDone=()=>{if(myRun!==runId)return;REVDONE=true;if(R.length)render();};
   if(S.wpmax>0&&spend('r',1))compute(d,o,{},true).then(rs=>{if(myRun!==runId)return;REV=rs.map(r=>buildGeom(r));revDone();}).catch(revDone);else revDone();$('#reptxt').style.display='none';
-  msg('Varış: '+P.to.text+(P.to.pid||P.to.lat!=null?'':' (listeden seçilmedi, Google kendi yorumladı)')+' · '+R.length+' rota'+(nHidden?' ('+nHidden+' rota gizlendi: başka bir rota hem daha hızlı hem daha ucuz)':'')+'.'+(placesErr?' Google adres önerisi kapalı ('+(/not been used|disabled|blocked/i.test(placesErr)?'Places API (New) etkin değil':placesErr.slice(0,80))+'); OpenStreetMap kullanıldı.':'')+(autoTried?` Otomatik: ${autoTried} denendi, ${R.filter(x=>x.auto).length} kaldı.`:'')+(errs.length?' (Başarısız: '+errs.join(' | ')+')':''));
+  msg('Varış: '+P.to.text+(P.to.pid||P.to.lat!=null?'':' (listeden seçilmedi, Google kendi yorumladı)')+' · '+R.length+' rota'+(nHidden?' ('+nHidden+' rota gizlendi, ayarlardan değiştirilebilir)':'')+'.'+(placesErr?' Google adres önerisi kapalı ('+(/not been used|disabled|blocked/i.test(placesErr)?'Places API (New) etkin değil':placesErr.slice(0,80))+'); OpenStreetMap kullanıldı.':'')+(autoTried?` Otomatik: ${autoTried} denendi, ${R.filter(x=>x.auto).length} kaldı.`:'')+(errs.length?' (Başarısız: '+errs.join(' | ')+')':''));
 }
 
 // ---------- Kartlar ----------

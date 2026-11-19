@@ -7,7 +7,10 @@ const LL_CSS='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',LL_JS='https://u
 let llReady=null;
 function loadLeaflet(){if(llReady)return llReady;
   llReady=new Promise((res,rej)=>{const l=document.createElement('link');l.rel='stylesheet';l.href=LL_CSS;document.head.appendChild(l);
-    const s=document.createElement('script');s.src=LL_JS;s.onload=res;s.onerror=()=>{llReady=null;rej(new Error('Leaflet yüklenemedi'));};document.head.appendChild(s);});
+    const g=document.createElement('link');g.rel='stylesheet';g.href='vendor/leaflet-gesture-handling.min.css';document.head.appendChild(g);
+    const s=document.createElement('script');s.src=LL_JS;
+    // tek parmak sayfayı kaydırsın, iki parmak haritayı: Leaflet'ten sonra hareket eklentisi
+    s.onload=()=>{const q=document.createElement('script');q.src='vendor/leaflet-gesture-handling.min.js';q.onload=res;q.onerror=res;document.head.appendChild(q);};s.onerror=()=>{llReady=null;rej(new Error('Leaflet yüklenemedi'));};document.head.appendChild(s);});
   return llReady;}
 
 // ---- günlük kullanım kilidi (ücretsiz planların günlük sınırının altında kalmak için) ----
@@ -125,7 +128,7 @@ async function openProv(force){const p=pv();keyForm(p);
   if(p.custom)return openYandex(force);
   try{await loadLeaflet();}catch(e){pmsg(e.message,1);return;}
   const k=keyOf(p);
-  if(!lmap){lmap=L.map('pmap',{zoomControl:true,attributionControl:true}).setView([41.01,28.97],10);}
+  if(!lmap){lmap=L.map('pmap',{zoomControl:true,attributionControl:true,gestureHandling:true,gestureHandlingOptions:{text:{touch:'Haritayı kaydırmak için iki parmak kullan',scroll:'Yakınlaştırmak için Ctrl + tekerlek',scrollMac:'Yakınlaştırmak için ⌘ + tekerlek'},duration:1200}}).setView([41.01,28.97],10);}
   setTimeout(()=>lmap.invalidateSize(),50);
   // katmanlar (döşeme sayacı ile)
   if(base)lmap.removeLayer(base);if(flow)lmap.removeLayer(flow);base=flow=null;
@@ -193,6 +196,8 @@ function loadYandex(k){if(yLoad)return yLoad;
 async function openYandex(force){const k=keyOf(PROV.yandex);
   pmsg('Yandex yükleniyor…');try{await loadYandex(k);}catch(e){pmsg(e.message,1);return;}
   if(!yMap){yMap=new ymaps.Map('ymap',{center:[41.01,28.97],zoom:10,controls:['zoomControl','trafficControl','geolocationControl']},{suppressMapOpenBlock:true});
+    // tek parmakla sürükleme kapalı: sayfa kayar; iki parmakla harita hareket eder ve yakınlaşır
+    try{yMap.behaviors.disable('drag');yMap.behaviors.enable('multiTouch');}catch(e){}
     yTraffic=yMap.controls.get('trafficControl');try{yTraffic.state.set('trafficShown',true);}catch(e){}}
   setTimeout(()=>yMap.container.fitToViewport(),50);
   if(!P.from||!P.to){pmsg('Nereden ve nereye gir.');$('#pcards').innerHTML='';return;}
