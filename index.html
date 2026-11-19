@@ -99,10 +99,8 @@ header{z-index:1100}
   <div class="sethead"><b>Ayarlar</b><button id="setclose" class="pri">Kapat ✕</button></div>
   <label>Google API anahtarı (Maps JavaScript API + Routes API açık olmalı)</label>
   <input id="key" placeholder="AIza...">
-  <label>Zaman değeri: 1 dakika kaç ₺ eder? (bunun üstünde ₺/dk isteyen ücretli yol önerilmez)</label>
+  <label>Dakikanın değeri (₺). Ücretli yol, kazandırdığı her dakika için bundan fazla istiyorsa önerilmez. Örnek: 10 ₺ ise 3 dk kazandıran yol en fazla 3 × 10 = 30 ₺ olmalı.</label>
   <input id="thr" type="number" min="0" step="1">
-  <label>Araç yakıtı (ücret hesabı için)</label>
-  <select id="emis"><option value="GASOLINE">Benzin</option><option value="DIESEL">Dizel</option><option value="HYBRID">Hibrit</option><option value="ELECTRIC">Elektrik</option></select>
   <label>Açılışta son hedefe otomatik arama / öneriyi sesli oku</label>
   <div class="row"><select id="autorun"><option value="1">Otomatik arama açık</option><option value="0">Otomatik arama kapalı</option></select>
     <select id="navgo"><option value="0">Maps: önce rotayı göster</option><option value="1">Maps: doğrudan başlat</option></select>
@@ -116,9 +114,9 @@ header{z-index:1100}
   <select id="hdom"><option value="slow">Eşikten fazla yavaşsa gizle</option><option value="show">Hep göster</option><option value="hide">Hep gizle</option></select>
   <label>Gizleme eşiği: en hızlıdan yüzde kaç yavaş? (%)</label>
   <input id="hpct" type="number" min="0" step="5">
-  <label>Dolambaç eşiği (manevra/km): üstündeki rotalar önerilmez, otomatik adaylar elenir</label>
+  <label>Dolambaç sınırı (km başına dönüş). Üstündeki rotalar "sokak arası" sayılır, önerilmez. Örnek: 2 → 10 km'de en fazla 2 × 10 = 20 dönüş.</label>
   <input id="wmax" type="number" min="0" step="0.1">
-  <label>Otomatik aday sayısı (her biri ek bir API çağrısı)</label>
+  <label>Google'ın göstermediği yolları arama: kaç deneme yapılsın (her deneme 1 istek harcar)</label>
   <select id="auton"><option>0</option><option>2</option><option>4</option><option>6</option></select>
   <label>Ücret hesabı (kapatırsan istekler daha ucuz kademede kalabilir)</label>
   <select id="tolls"><option value="1">Açık</option><option value="0">Kapalı</option></select>
@@ -240,7 +238,7 @@ function matchLog(g,e){const L=g.pts[g.pts.length-1].d;if(Math.abs(L-e.len)>0.1*
 const $=s=>document.querySelector(s);
 const store={get(k,d){try{const v=localStorage.getItem('rk_'+k);return v==null?d:JSON.parse(v);}catch(e){return d;}},
              set(k,v){try{localStorage.setItem('rk_'+k,JSON.stringify(v));}catch(e){}}};
-const S={key:store.get('key',''),thr:store.get('thr',10),emis:store.get('emis','GASOLINE'),vias:store.get('vias',[]),
+const S={key:store.get('key',''),thr:store.get('thr',10),vias:store.get('vias',[]),
          from:store.get('from',''),to:store.get('to',''),wmax:store.get('wmax',2),auton:store.get('auton',2),
          tolls:store.get('tolls',1),lim_r:store.get('lim_r',900),lim_m:store.get('lim_m',9000),lim_p:store.get('lim_p',9000),
          fromP:store.get('fromP',null),toP:store.get('toP',null),tp:store.get('tp',null),hw:store.get('hw',null),hwv:store.get('hwv',0),navgo:store.get('navgo',0),hcheap:store.get('hcheap','show'),hdom:store.get('hdom','slow'),hpct:store.get('hpct',20),traffic:store.get('traffic',1),wpmax:store.get('wpmax',9),favs:store.get('favs',[]),autorun:store.get('autorun',1),voice:store.get('voice',1)};
@@ -339,7 +337,7 @@ function why(m){m=String(m||'');
   if(/Failed to fetch|NetworkError|Load failed/i.test(m))return 'İstek gönderilemedi: internet yok ya da anahtarın web sitesi kısıtı bu adrese izin vermiyor.';
   return m.slice(0,160);}
 function msg(t,err){$('#msg').textContent=t||'';$('#msg').className=err?'err':'';}
-function save(){['key','thr','emis','vias','wmax','auton','tolls','lim_r','lim_m','lim_p','fromP','toP','tp','hw','hwv','navgo','hcheap','hdom','hpct','traffic','wpmax','favs','autorun','voice'].forEach(k=>store.set(k,S[k]));}
+function save(){['key','thr','vias','wmax','auton','tolls','lim_r','lim_m','lim_p','fromP','toP','tp','hw','hwv','navgo','hcheap','hdom','hpct','traffic','wpmax','favs','autorun','voice'].forEach(k=>store.set(k,S[k]));}
 const fmtMin=s=>(s/60).toFixed(1)+' dk', fmtKm=m=>(m/1000).toFixed(1)+' km';
 const fmtTL=v=>isNaN(v)?'? ₺':(Math.round(v*100)/100).toLocaleString('tr-TR')+' ₺';
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -347,7 +345,7 @@ const hhmm=ts=>new Date(ts).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2
 
 // ---------- Ayarlar ----------
 function renderSettings(){
-  $('#key').value=S.key;$('#thr').value=S.thr;$('#emis').value=S.emis;$('#wmax').value=S.wmax;$('#auton').value=String(S.auton);
+  $('#key').value=S.key;$('#thr').value=S.thr;$('#wmax').value=S.wmax;$('#auton').value=String(S.auton);
   $('#tolls').value=String(S.tolls);$('#lim_r').value=S.lim_r;$('#lim_m').value=S.lim_m;$('#lim_p').value=S.lim_p;renderUsage();
   $('#vias').innerHTML=S.vias.length?S.vias.map((v,i)=>`<div class="via">
     <input type="checkbox" data-i="${i}" class="von" ${v.on?'checked':''}>
@@ -398,7 +396,6 @@ $('#key').onchange=e=>{S.key=e.target.value.trim();save();loadMaps();};
 $('#thr').onchange=e=>{S.thr=parseFloat(e.target.value)||0;save();if(R.length)render();};
 $('#wmax').onchange=e=>{S.wmax=parseFloat(e.target.value)||0;save();if(R.length)render();};
 $('#auton').onchange=e=>{S.auton=parseInt(e.target.value)||0;save();};
-$('#emis').onchange=e=>{S.emis=e.target.value;save();};
 $('#tolls').onchange=e=>{S.tolls=+e.target.value;save();};
 $('#lim_r').onchange=e=>{S.lim_r=Math.max(0,parseInt(e.target.value)||0);save();renderUsage();};
 $('#lim_m').onchange=e=>{S.lim_m=Math.max(0,parseInt(e.target.value)||0);save();renderUsage();};
@@ -610,7 +607,7 @@ const FIELDS=['routes.duration','routes.staticDuration','routes.distanceMeters',
 async function compute(o,d,mod,alt,via,stops){
   const body={origin:o,destination:d,travelMode:'DRIVE',routingPreference:'TRAFFIC_AWARE',computeAlternativeRoutes:!!alt&&!via,
     extraComputations:S.tolls?['TOLLS']:[],languageCode:'tr-TR',regionCode:'TR',units:'METRIC',
-    routeModifiers:Object.assign({vehicleInfo:{emissionType:S.emis}},mod)};
+    routeModifiers:Object.assign({},mod)};
   if(via)body.intermediates=[{location:{latLng:{latitude:via.lat,longitude:via.lng}},via:true}];
   if(stops&&stops.length){body.intermediates=stops.map(p=>({location:{latLng:{latitude:+p.lat.toFixed(6),longitude:+p.lng.toFixed(6)}}}));body.computeAlternativeRoutes=false;}
   const res=await fetch('https://routes.googleapis.com/directions/v2:computeRoutes',{method:'POST',
