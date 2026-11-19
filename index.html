@@ -141,6 +141,7 @@ header{z-index:1100}
 <div id="verdict"></div>
 <div style="position:relative"><div id="offr">Rotanın dışındasın</div></div>
 <div id="map">API anahtarını ⚙︎ ayarlardan gir</div>
+<div id="glegend" style="padding:6px 10px 0;font-size:13px;color:var(--mut)"></div>
 <div id="msg"></div>
 <div class="cards" id="cards"></div>
 <div style="padding:0 10px 30px;display:none" id="repwrap"><button id="repbtn" style="width:100%">Hata raporu kopyala</button>
@@ -149,6 +150,7 @@ header{z-index:1100}
 <div id="tab-prov" style="display:none">
   <div style="padding:8px 10px;display:grid;gap:6px"><div id="pkey"></div></div>
   <div id="pmap"></div><div id="ymap" style="height:45vh;display:none"></div>
+  <div id="plegend" style="padding:6px 10px 0;font-size:13px;color:var(--mut)"></div>
   <div class="row" style="padding:6px 10px"><div id="pmsg" style="flex:1;color:var(--mut);font-size:14px"></div><button id="prefresh" style="flex:0">↻</button></div>
   <div class="cards" id="pcards"></div>
 </div>
@@ -297,6 +299,17 @@ const GATES=[[/^15 Temmuz/,[41.042,29.028,41.048,29.039],300],[/^FSM/,[41.087,29
 // 15 Temmuz ve FSM: ücret Anadolu→Avrupa yönünde (eski kayıtlarda ters yazılmıştı, bir kez düzeltilir)
 S.tp.forEach(t=>{if(/^(15 Temmuz|FSM)/.test(t.name)&&t.v!==2){if(t.dir===90)t.dir=270;t.v=2;}});
 S.tp.forEach(t=>{const m=GATES.find(([n])=>n.test(t.name));if(m){t.gate=m[1];t.r=m[2];}delete t.re;});
+// Rota renkleri boğaz geçişine göre sabit: 15 Temmuz mavi, FSM sarı, YSS mor, Avrasya yeşil.
+// Aynı geçişten birden fazla rota varsa o rengin tonları (ör. mavi → turkuaz → lacivert, sarı → turuncu → kehribar).
+const XPAL={T15:['#3b82f6','#22d3ee','#4f46e5','#93c5fd'],FSM:['#facc15','#fb923c','#f59e0b','#fde68a'],YSS:['#a855f7','#e879f9','#7c3aed','#c4b5fd'],
+  AVR:['#22c55e','#2dd4bf','#84cc16','#86efac'],OSM:['#ef4444','#fb7185','#f97316'],CNK:['#ec4899','#f9a8d4'],NONE:['#e5e7eb','#94a3b8','#cbd5e1','#f1f5f9']};
+const XNAME={T15:'15 Temmuz (1. köprü)',FSM:'FSM (2. köprü)',YSS:'Yavuz Sultan Selim (3. köprü)',AVR:'Avrasya Tüneli',OSM:'Osmangazi',CNK:'1915 Çanakkale',NONE:'Boğaz geçişi yok'};
+const XKEY=[[/^15 Temmuz/,'T15'],[/^FSM/,'FSM'],[/^Yavuz/,'YSS'],[/^Avrasya/,'AVR'],[/^Osmangazi/,'OSM'],[/^1915/,'CNK']];
+function crossingOf(g){for(const t of S.tp){if(!t.gate)continue;const k=XKEY.find(([re])=>re.test(t.name));if(k&&crossIdx(g,t.gate)>=0)return k[1];}return 'NONE';}
+function colorize(list){const used={};list.forEach(x=>{const k=crossingOf(x.g),i=used[k]||0;used[k]=i+1;x.xing=k;x.color=XPAL[k][i%XPAL[k].length];});}
+function xTag(x){return x.xing?`<span class="tag" style="border:1px solid ${x.color};color:${x.color}">${XNAME[x.xing]}</span>`:'';}
+function legendHtml(list){const ks=[...new Set(list.map(x=>x.xing).filter(Boolean))];
+  return ks.map(k=>`<span style="white-space:nowrap"><span style="display:inline-block;width:14px;height:4px;border-radius:2px;background:${XPAL[k][0]};vertical-align:middle"></span> ${XNAME[k]}</span>`).join(' &nbsp; ');}
 function crossIdx(g,gate){const [ax,ay]=proj(gate[0],gate[1]),[bx,by]=proj(gate[2],gate[3]),P=g.pts,
     side=(px,py,qx,qy,rx,ry)=>(qx-px)*(ry-py)-(qy-py)*(rx-px);
   for(let i=0;i<P.length-1;i++){const p=P[i],q=P[i+1];
@@ -683,7 +696,7 @@ async function run(){
   if(keep.length>6){const must=keep.filter(x=>x===R[0]||mine(x)),rest=keep.filter(x=>!must.includes(x));
     keep=must.concat(rest.slice(0,Math.max(0,6-must.length))).sort((a,b)=>a.eff-b.eff);}
   HIDDEN=R.filter(x=>!keep.includes(x));R=keep;const nHidden=HIDDEN.length;
-  R.forEach((x,i)=>{x.label=String.fromCharCode(65+i);x.color=COLORS[i%COLORS.length];});
+  R.forEach((x,i)=>{x.label=String.fromCharCode(65+i);});colorize(R);
   RKEY=placeKey();render();drawAll();$('#repwrap').style.display='block';
   // Ters yön rotaları: ara noktaların karşı şeride (dönüş yoluna) düşmemesi için, karşı yöne 60 m'den yakın noktalar kullanılmaz.
   REV=null;REVDONE=false;LASTOD={o,d};const myRun=++runId;
@@ -782,7 +795,7 @@ function lockText(x){const L=x.lock,n=x.navWp;
   if(L.state==='partial')return `⚠ Kısmen: ${n} ara noktayla Google ${L.offKm.toFixed(1)} km boyunca farklı gidiyor; Maps'te o kesimi kontrol et`;
   if(L.state==='budget')return `Doğrulama atlandı (aylık limit). Doğrulanmamış ${n} ara nokta gönderiliyor`;
   return `Doğrulama yapılamadı${L.err?' ('+L.err+')':''}. Doğrulanmamış ${n} ara nokta gönderiliyor`;}
-function render(){
+function render(){$('#glegend').innerHTML=legendHtml(R);
   const A=R[0],thr=S.thr;
   R.forEach(x=>{x.toll=finalToll(x.gtoll,x.g,x.hw);x.cost=x.toll.known?x.toll.price+(x.eff/60)*thr:NaN;x.windy=x.wind.perKm>S.wmax;});
   let pool=R.filter(x=>!isNaN(x.cost)&&!x.windy);if(!pool.length)pool=R.filter(x=>!isNaN(x.cost));
@@ -826,7 +839,7 @@ function render(){
       <b style="color:${x.color}">${x.label} kolu:</b> ${fmtKm(b.bi.len)}, ~${fmtMin(b.bi.t)} ${esc(b.bi.ins.join(' → '))}<br>
       <span class="sub">Trafiksiz fark: ${((b.bi.t-b.ai.t)/60>=0?'+':'')}${((b.bi.t-b.ai.t)/60).toFixed(1)} dk, ${((b.bi.len-b.ai.len)/1000>=0?'+':'')}${((b.bi.len-b.ai.len)/1000).toFixed(1)} km</span></div>`).join('');
     return `<div class="card ${x===rec?'rec':''}" id="card${i}" style="--c:${x.color}">
-      <div class="h"><span class="lbl">${x.label}</span><span class="big">${fmtMin(x.eff)}</span><span>${fmtKm(x.dist)}</span>${tollTag}${x.windy?'<span class="tag bad">dolambaçlı</span>':''}${x===rec?'<span class="tag ok">önerilen</span>':''}${i===0?'<span class="tag">en hızlı</span>':''}</div>
+      <div class="h"><span class="lbl">${x.label}</span><span class="big">${fmtMin(x.eff)}</span><span>${fmtKm(x.dist)}</span>${tollTag}${x.windy?'<span class="tag bad">dolambaçlı</span>':''}${x===rec?'<span class="tag ok">önerilen</span>':''}${i===0?'<span class="tag">en hızlı</span>':''}${xTag(x)}</div>
       ${cmp1?`<div class="sub" style="font-size:15px;color:var(--tx)">${esc(cmp1)}</div>`:''}
       <details><summary>Hesap ve ayrıntılar</summary>
       <div class="sub">Kaynak: ${esc(x.tags.join(', '))}${i>0?' · '+x.br.length+' ayrışma':''}</div>
@@ -856,7 +869,7 @@ function startDrive(i){const x=R[i];if(window.speechSynthesis)speechSynthesis.ca
 $('#verdict').onclick=e=>{if(e.target.id==='vback'){e.preventDefault();sel=null;render();if(map)drawAll();return;}
   const n=e.target.closest('.nav');if(n)startDrive(+n.dataset.i);};
 function showHidden(){const cur=R[sel];R=R.concat(HIDDEN).sort((a,b)=>a.eff-b.eff);HIDDEN=[];
-  R.forEach((x,i)=>{x.label=String.fromCharCode(65+i);x.color=COLORS[i%COLORS.length];if(i>0&&!x.br)x.br=[];});sel=R.indexOf(cur);render();drawAll();}
+  R.forEach((x,i)=>{x.label=String.fromCharCode(65+i);if(i>0&&!x.br)x.br=[];});colorize(R);sel=R.indexOf(cur);render();drawAll();}
 $('#cards').onclick=e=>{if(e.target.id==='showhidden'){showHidden();return;}
   const n=e.target.closest('.nav');
   if(n){startDrive(+n.dataset.i);return;}

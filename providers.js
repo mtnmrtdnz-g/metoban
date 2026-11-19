@@ -147,7 +147,7 @@ async function openProv(force){const p=pv();keyForm(p);
   let rs;try{rs=await p.route(a,b,k);}catch(e){pmsg(p.name+' rota vermedi: '+String(e.message).slice(0,160),1);return;}
   if(!rs.length){pmsg(p.name+' bu iki nokta arasında rota bulamadı.',1);return;}
   rs.sort((x,y)=>x.dur-y.dur);
-  PR=rs.map((x,i)=>Object.assign(x,{label:String.fromCharCode(65+i),color:COLORS[i%COLORS.length],g:geomFrom(x.pts),via:null,lock:null,tags:[p.name]}));
+  PR=rs.map((x,i)=>Object.assign(x,{label:String.fromCharCode(65+i),g:geomFrom(x.pts),via:null,lock:null,tags:[p.name]}));colorize(PR);
   const info=`Başlangıç: ${a.src} · Varış: ${b.src}`;
   cache[tab]={ck,t:Date.now(),routes:PR,info};drawProv(info);}
 
@@ -174,13 +174,13 @@ function renderCards0(info,fresh){const p=pv(),A=PR[0];
     const gl=!fresh?'Google karşılaştırması için bu adresi Google sekmesinde de arat.':
       tw.off<500?`Google'da da var: ${HIDDEN.includes(tw.y)?'gizlenen rotalardan biri':`<b style="color:${tw.y.color}">${tw.y.label}</b> rotası`}, Google ${Math.round(tw.y.eff/60)} dk · ${esc(p.name)} ${Math.round(x.dur/60)} dk (fark ${Math.round((x.dur-tw.y.eff)/60)>=0?'+':''}${Math.round((x.dur-tw.y.eff)/60)} dk)`:
       `Google'ın listesinde yok (${(tw.own/1000).toFixed(1)} km'si Google'ın en yakın rotasından farklı)`;
-    return `<div class="card" style="--c:${x.color}"><div class="h"><span class="lbl">${x.label}</span><span class="big">${(x.dur/60).toFixed(0)} dk</span><span>${fmtKm(x.dist)}</span>${toll}${i===0?'<span class="tag">en hızlı</span>':''}</div>
+    return `<div class="card" style="--c:${x.color}"><div class="h"><span class="lbl">${x.label}</span><span class="big">${(x.dur/60).toFixed(0)} dk</span><span>${fmtKm(x.dist)}</span>${toll}${i===0?'<span class="tag">en hızlı</span>':''}${xTag(x)}</div>
       ${i>0?`<div class="sub" style="font-size:15px;color:var(--tx)">A'ya göre +${((x.dur-A.dur)/60).toFixed(1)} dk, ${((x.dist-A.dist)/1000>=0?'+':'')}${((x.dist-A.dist)/1000).toFixed(1)} km</div>`:''}
       ${x.delay!=null?`<div class="sub">Trafik gecikmesi: ${x.delay>=60?'+'+Math.round(x.delay/60)+' dk':'yok'}</div>`:'<div class="sub">Trafiksiz tahmin</div>'}
       <div class="sub">${gl}</div>
       <div class="acts">${p.custom?`<button class="ysel" data-i="${i}">Haritada göster</button>`:''}<a class="btn pri pnav" data-i="${i}" href="${navUrl(x,i+1)}" target="_blank" rel="noopener">Google Maps ▶</a>
         <a class="btn pnav" data-i="${i}" href="${yandexUrl(x)}">Yandex ▶</a></div></div>`;}).join('');
-  pmsg(`${PR.length} rota (${p.name}). ${info}`);}
+  pmsg(`${PR.length} rota (${p.name}). ${info}`);$('#plegend').innerHTML=legendHtml(PR);}
 document.getElementById('pcards').addEventListener('click',e=>{const ys=e.target.closest('.ysel');if(ys&&yMR){const want=+ys.dataset.i;let k=0;yMR.getRoutes().each(rt=>{if(k++===PR[want]._yi)yMR.setActiveRoute(rt);});return;}
   const n=e.target.closest('.pnav');if(!n)return;
   const x=PR[+n.dataset.i];try{store.set('pend',{ts:Date.now(),h:new Date().getHours(),pred:x.dur/60,s:samples(x.g),len:x.g.pts[x.g.pts.length-1].d,label:x.label,tags:pv().name});}catch(err){}});
@@ -226,7 +226,7 @@ async function openYandex(force){const k=keyOf(PROV.yandex);
         tollM:pr.hasTolls===true?1:(pr.hasTolls===false?0:null),price:null,_yi:yi++});});
     if(!out.length){pmsg('Yandex bu iki nokta arasında rota bulamadı.',1);return;}
     out.sort((x,y)=>x.dur-y.dur);
-    PR=out.filter(x=>x.pts.length>1).map((x,i)=>Object.assign(x,{label:String.fromCharCode(65+i),color:COLORS[i%COLORS.length],g:geomFrom(x.pts),via:null,lock:null,tags:['Yandex']}));
+    PR=out.filter(x=>x.pts.length>1).map((x,i)=>Object.assign(x,{label:String.fromCharCode(65+i),g:geomFrom(x.pts),via:null,lock:null,tags:['Yandex']}));colorize(PR);
     if(!PR.length){pmsg('Yandex rotasının çizgisi okunamadı.',1);return;}
     const info=`Başlangıç: ${a.src} · Varış: ${b.src}`;cache.yandex={ck,t:Date.now(),routes:PR,info};renderCards(info);});}
 
