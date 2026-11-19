@@ -120,8 +120,6 @@ header{z-index:1100}
   <input id="wmax" type="number" min="0" step="0.1">
   <label>Google'ın göstermediği yolları arama: kaç deneme yapılsın (her deneme 1 istek harcar)</label>
   <select id="auton"><option>0</option><option>2</option><option>4</option><option>6</option></select>
-  <label>Ücret hesabı (kapatırsan istekler daha ucuz kademede kalabilir)</label>
-  <select id="tolls"><option value="1">Açık</option><option value="0">Kapalı</option></select>
   <label>Harcama kilidi: aylık en fazla Routes isteği / harita yüklemesi / adres önerisi (aşılınca uygulama istek atmaz)</label>
   <div class="row"><input id="lim_r" type="number" min="0" step="10"><input id="lim_m" type="number" min="0" step="100"><input id="lim_p" type="number" min="0" step="100"></div>
   <div id="usage" class="hint"></div>
@@ -244,7 +242,7 @@ const store={get(k,d){try{const v=localStorage.getItem('rk_'+k);return v==null?d
              set(k,v){try{localStorage.setItem('rk_'+k,JSON.stringify(v));}catch(e){}}};
 const S={key:store.get('key',''),thr:store.get('thr',10),vias:store.get('vias',[]),
          from:store.get('from',''),to:store.get('to',''),wmax:store.get('wmax',2),auton:store.get('auton',2),
-         tolls:store.get('tolls',1),lim_r:store.get('lim_r',900),lim_m:store.get('lim_m',9000),lim_p:store.get('lim_p',9000),
+         lim_r:(v=>v===900?4000:v)(store.get('lim_r',4000)),lim_m:store.get('lim_m',9000),lim_p:store.get('lim_p',9000),
          fromP:store.get('fromP',null),toP:store.get('toP',null),tp:store.get('tp',null),hw:store.get('hw',null),hwv:store.get('hwv',0),navgo:store.get('navgo',0),xall:store.get('xall',1),hcheap:store.get('hcheap','show'),hdom:store.get('hdom','slow'),hpct:store.get('hpct',20),traffic:store.get('traffic',1),wpmax:store.get('wpmax',9),favs:store.get('favs',[]),autorun:store.get('autorun',1),voice:store.get('voice',1)};
 // Otomobil (1. sınıf), 1 Temmuz 2026 tarifesi. dir: null=her yön, 90=yalnız doğuya (Avrupa→Anadolu), 270=yalnız batıya (Anadolu→Avrupa)
 if(!S.tp)S.tp=[
@@ -371,7 +369,7 @@ function why(m){m=String(m||'');
   if(/Failed to fetch|NetworkError|Load failed/i.test(m))return 'İstek gönderilemedi: internet yok ya da anahtarın web sitesi kısıtı bu adrese izin vermiyor.';
   return m.slice(0,160);}
 function msg(t,err){$('#msg').textContent=t||'';$('#msg').className=err?'err':'';}
-function save(){['key','thr','vias','wmax','auton','tolls','lim_r','lim_m','lim_p','fromP','toP','tp','hw','hwv','navgo','xall','hcheap','hdom','hpct','traffic','wpmax','favs','autorun','voice'].forEach(k=>store.set(k,S[k]));}
+function save(){['key','thr','vias','wmax','auton','lim_r','lim_m','lim_p','fromP','toP','tp','hw','hwv','navgo','xall','hcheap','hdom','hpct','traffic','wpmax','favs','autorun','voice'].forEach(k=>store.set(k,S[k]));}
 const fmtMin=s=>(s/60).toFixed(1)+' dk', fmtKm=m=>(m/1000).toFixed(1)+' km';
 const fmtTL=v=>isNaN(v)?'? ₺':(Math.round(v*100)/100).toLocaleString('tr-TR')+' ₺';
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -380,7 +378,7 @@ const hhmm=ts=>new Date(ts).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2
 // ---------- Ayarlar ----------
 function renderSettings(){
   $('#key').value=S.key;$('#thr').value=S.thr;$('#wmax').value=S.wmax;$('#auton').value=String(S.auton);
-  $('#tolls').value=String(S.tolls);$('#lim_r').value=S.lim_r;$('#lim_m').value=S.lim_m;$('#lim_p').value=S.lim_p;renderUsage();
+  $('#lim_r').value=S.lim_r;$('#lim_m').value=S.lim_m;$('#lim_p').value=S.lim_p;renderUsage();
   $('#vias').innerHTML=S.vias.length?S.vias.map((v,i)=>`<div class="via">
     <input type="checkbox" data-i="${i}" class="von" ${v.on?'checked':''}>
     <input type="text" data-i="${i}" class="vname" value="${esc(v.name)}">
@@ -431,7 +429,6 @@ $('#key').onchange=e=>{S.key=e.target.value.trim();save();loadMaps();};
 $('#thr').onchange=e=>{S.thr=parseFloat(e.target.value)||0;save();if(R.length)render();};
 $('#wmax').onchange=e=>{S.wmax=parseFloat(e.target.value)||0;save();if(R.length)render();};
 $('#auton').onchange=e=>{S.auton=parseInt(e.target.value)||0;save();};
-$('#tolls').onchange=e=>{S.tolls=+e.target.value;save();};
 $('#lim_r').onchange=e=>{S.lim_r=Math.max(0,parseInt(e.target.value)||0);save();renderUsage();};
 $('#lim_m').onchange=e=>{S.lim_m=Math.max(0,parseInt(e.target.value)||0);save();renderUsage();};
 $('#lim_p').onchange=e=>{S.lim_p=Math.max(0,parseInt(e.target.value)||0);save();renderUsage();};
@@ -641,7 +638,7 @@ const FIELDS=['routes.duration','routes.staticDuration','routes.distanceMeters',
   'routes.legs.steps.navigationInstruction.instructions'].join(',');
 async function compute(o,d,mod,alt,via,stops){
   const body={origin:o,destination:d,travelMode:'DRIVE',routingPreference:'TRAFFIC_AWARE',computeAlternativeRoutes:!!alt&&!via,
-    extraComputations:S.tolls?['TOLLS']:[],languageCode:'tr-TR',regionCode:'TR',units:'METRIC',
+    languageCode:'tr-TR',regionCode:'TR',units:'METRIC',
     routeModifiers:Object.assign({},mod)};
   if(via)body.intermediates=[{location:{latLng:{latitude:via.lat,longitude:via.lng}},via:true}];
   if(stops&&stops.length){body.intermediates=stops.map(p=>({location:{latLng:{latitude:+p.lat.toFixed(6),longitude:+p.lng.toFixed(6)}}}));body.computeAlternativeRoutes=false;}
