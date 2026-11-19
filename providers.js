@@ -91,7 +91,7 @@ function geomFrom(pts){const out=[];let prev=null,D=0;
   return {pts:out,segs:[],grid:null};}
 // Google'ın bulduğu rotalardan hangisiyle aynı yol? (iki yönde de farklı kesimlerin toplamı)
 function googleTwin(g){let best=null;
-  for(const y of R){const own=diff(g,y.g).reduce((s,o)=>s+g.pts[o.b[1]].d-g.pts[o.b[0]].d,0),off=own+diff(y.g,g).reduce((s,o)=>s+y.g.pts[o.b[1]].d-y.g.pts[o.b[0]].d,0);
+  for(const y of R.concat(HIDDEN)){const own=diff(g,y.g).reduce((s,o)=>s+g.pts[o.b[1]].d-g.pts[o.b[0]].d,0),off=own+diff(y.g,g).reduce((s,o)=>s+y.g.pts[o.b[1]].d-y.g.pts[o.b[0]].d,0);
     if(!best||off<best.off)best={y,off,own};}
   return best;}
 
@@ -158,7 +158,7 @@ function drawProv(info){const p=pv();
     lmap.fitBounds(L.latLngBounds(all),{padding:[30,30]});}
   renderCards(info);}
 function withFreshGoogle(f){const fresh=R.length&&RKEY===placeKey();if(fresh)return f(true);
-  const sR=R,sD=DEF,sV=REV;R=[];DEF=null;REV=null;try{return f(false);}finally{R=sR;DEF=sD;REV=sV;}}
+  const sR=R,sH=HIDDEN,sD=DEF,sV=REV;R=[];HIDDEN=[];DEF=null;REV=null;try{return f(false);}finally{R=sR;HIDDEN=sH;DEF=sD;REV=sV;}}
 function renderCards(info){return withFreshGoogle(fresh=>renderCards0(info,fresh));}
 function renderCards0(info,fresh){const p=pv(),A=PR[0];
   $('#pcards').innerHTML=PR.map((x,i)=>{

@@ -317,7 +317,7 @@ function spend(kind,n){const u=usage(),F={r:['r','lim_r'],m:['mp','lim_m'],p:['p
   if(u[F[0]]+n>S[F[1]])return false;u[F[0]]+=n;store.set('usage',u);renderUsage();return true;}
 let LOG=store.get('log',[])||[];
 const COLORS=['#5aa9ff','#f5b942','#c77dff','#3ecf8e','#ff8fab','#7ee8fa','#ffd166','#a0a0ff'];
-let map=null,overlays=[],viaMarkers=[],addMode=false,R=[],DEF=null,REV=null,REVDONE=false,LASTOD=null,runId=0,sel=null,spoken=true,autoDone=false,forceAuto=false;
+let map=null,overlays=[],viaMarkers=[],addMode=false,R=[],HIDDEN=[],DEF=null,REV=null,REVDONE=false,LASTOD=null,runId=0,sel=null,spoken=true,autoDone=false,forceAuto=false;
 
 function why(m){m=String(m||'');
   if(/quota|RESOURCE_EXHAUSTED|rate limit|429/i.test(m))return 'Google kotası doldu (Console\'da koyduğun günlük sınır). Yarın sıfırlanır ya da Console > Kotalar\'dan sınırı yükselt. ['+m.slice(0,90)+']';
@@ -655,22 +655,23 @@ async function run(){
   kept.forEach((x,i)=>{x.br=i?diff(x.g,A.g).map(br=>({ai:branchInfo(A.g,br.a[0],br.a[1]),bi:branchInfo(x.g,br.b[0],br.b[1])})):[];});
   // otomatik adaylarda "gir-çık" sapmaları ele (aynı noktadan ayrılıp aynı noktaya dönen)
   R=kept.filter((x,i)=>i===0||!x.auto||!x.br.some(b=>b.ai.len<150&&b.bi.len>400));
-  // sadeleştir: en hızlıdan %30'dan fazla yavaş olanları gizle, en fazla 5 rota göster.
-  // Kendi kaydettiğin koridorlar ve en ucuz rota her zaman kalır.
-  const nAll=R.length;R.forEach(x=>{x.toll=finalToll(x.gtoll,x.g,x.hw);});
-  const price=x=>x.toll.known?x.toll.price:Infinity,minP=Math.min(...R.map(price));
-  const cheapest=R.find(x=>price(x)===minP),mine=x=>x.tags.some(t=>S.vias.some(v=>v.name===t));
-  let keep=R.filter(x=>x===R[0]||x===cheapest||mine(x)||x.eff<=1.3*R[0].eff);
-  if(keep.length>5){const must=keep.filter(x=>x===R[0]||x===cheapest||mine(x)),rest=keep.filter(x=>!must.includes(x));
+  // sadeleştir: yalnızca gerçekten kötü olanları gizle. Bir rota, başka bir rota hem daha hızlı hem de daha ucuz/aynı
+  // fiyatlıysa gizlenir (ör. ücretsiz D020 alternatifi, daha yavaş ama daha ucuzsa kalır). Kendi koridorların hep kalır.
+  // Kalanlar 5'i geçerse en hızlı 5 gösterilir; gizlenenler "Gizlenen rotaları göster" ile açılır.
+  R.forEach(x=>{x.toll=finalToll(x.gtoll,x.g,x.hw);});
+  const price=x=>x.toll.known?x.toll.price:Infinity,mine=x=>x.tags.some(t=>S.vias.some(v=>v.name===t));
+  const dominated=x=>R.some(y=>y!==x&&y.eff<=x.eff&&price(y)<=price(x)&&(y.eff<x.eff-30||price(y)<price(x)));
+  let keep=R.filter(x=>x===R[0]||mine(x)||!dominated(x));
+  if(keep.length>5){const must=keep.filter(x=>x===R[0]||mine(x)),rest=keep.filter(x=>!must.includes(x));
     keep=must.concat(rest.slice(0,Math.max(0,5-must.length))).sort((a,b)=>a.eff-b.eff);}
-  R=keep;const nHidden=nAll-R.length;
+  HIDDEN=R.filter(x=>!keep.includes(x));R=keep;const nHidden=HIDDEN.length;
   R.forEach((x,i)=>{x.label=String.fromCharCode(65+i);x.color=COLORS[i%COLORS.length];});
   RKEY=placeKey();render();drawAll();$('#repwrap').style.display='block';
   // Ters yön rotaları: ara noktaların karşı şeride (dönüş yoluna) düşmemesi için, karşı yöne 60 m'den yakın noktalar kullanılmaz.
   REV=null;REVDONE=false;LASTOD={o,d};const myRun=++runId;
   const revDone=()=>{if(myRun!==runId)return;REVDONE=true;if(R.length)render();};
   if(S.wpmax>0&&spend('r',1))compute(d,o,{},true).then(rs=>{if(myRun!==runId)return;REV=rs.map(r=>buildGeom(r));revDone();}).catch(revDone);else revDone();$('#reptxt').style.display='none';
-  msg('Varış: '+P.to.text+(P.to.pid||P.to.lat!=null?'':' (listeden seçilmedi, Google kendi yorumladı)')+' · '+R.length+' rota'+(nHidden?' ('+nHidden+' yavaş rota gizlendi)':'')+'.'+(placesErr?' Google adres önerisi kapalı ('+(/not been used|disabled|blocked/i.test(placesErr)?'Places API (New) etkin değil':placesErr.slice(0,80))+'); OpenStreetMap kullanıldı.':'')+(autoTried?` Otomatik: ${autoTried} denendi, ${R.filter(x=>x.auto).length} kaldı.`:'')+(errs.length?' (Başarısız: '+errs.join(' | ')+')':''));
+  msg('Varış: '+P.to.text+(P.to.pid||P.to.lat!=null?'':' (listeden seçilmedi, Google kendi yorumladı)')+' · '+R.length+' rota'+(nHidden?' ('+nHidden+' rota gizlendi: başka bir rota hem daha hızlı hem daha ucuz)':'')+'.'+(placesErr?' Google adres önerisi kapalı ('+(/not been used|disabled|blocked/i.test(placesErr)?'Places API (New) etkin değil':placesErr.slice(0,80))+'); OpenStreetMap kullanıldı.':'')+(autoTried?` Otomatik: ${autoTried} denendi, ${R.filter(x=>x.auto).length} kaldı.`:'')+(errs.length?' (Başarısız: '+errs.join(' | ')+')':''));
 }
 
 // ---------- Kartlar ----------
@@ -709,7 +710,7 @@ function wpFor(x,divOnly){
   const MAXW=Math.max(0,Math.min(9,+S.wpmax||0));x.navSkip=0;x.navDiv=0;x._pick=[];
   const T=wpTools(x),{P,N,L,okRev,settle}=T;if(!MAXW||N<10)return [];
   const cand=[];
-  const others=R.filter(y=>y!==x);if(DEF&&DEF!==x&&!others.includes(DEF))others.push(DEF);
+  const others=R.concat(HIDDEN).filter(y=>y!==x);if(DEF&&DEF!==x&&!others.includes(DEF))others.push(DEF);
   for(const y of others)for(const o of diff(x.g,y.g)){const s=o.b[0],e=o.b[1],len=P[e].d-P[s].d;if(len<300)continue;
     // ayrılmadan ~400 m sonra; diğer rotadan en az 120 m, karşı yönden en az 60 m uzakta. Bulunamazsa kolun tamamında aranır.
     let k=s;const tgt=P[s].d+Math.min(400,0.3*len);while(k<e&&P[k].d<tgt)k++;
@@ -815,7 +816,8 @@ function render(){
       ${tollLine?`<div class="math">${esc(tollLine)}</div>`:''}<div class="math">${esc(windLine)}</div><div class="math">${esc(costLine)}</div>${roads?`<div class="sub">Talimatlarda geçen yollar: ${esc(roads)}</div>`:''}
       ${divs}</details>
       <div class="acts">${i>0?`<button class="dz" data-i="${i}">Farkı göster</button>`:`<button class="all">Hepsini göster</button>`}
-        <a class="btn pri nav" data-i="${i}" href="${navUrl(x,i)}" target="_blank" rel="noopener">Navigasyon ▶</a></div></div>`;}).join('');
+        <a class="btn pri nav" data-i="${i}" href="${navUrl(x,i)}" target="_blank" rel="noopener">Navigasyon ▶</a></div></div>`;}).join('')
+    +(HIDDEN.length?`<button id="showhidden" style="width:100%">Gizlenen ${HIDDEN.length} rotayı göster (${HIDDEN.map(x=>Math.round(x.eff/60)+' dk').join(', ')})</button>`:'');
 }
 // Hata raporu: Google'ın döndürdüğü ham adımlar ve ücret hesabının dökümü (düzeltme için)
 function report(){const L=[];L.push('Rota raporu '+new Date().toLocaleString('tr-TR'));L.push('Nereden: '+(P.from&&P.from.me?'Konumum':P.from&&P.from.text)+' | Nereye: '+(P.to&&P.to.text));
@@ -835,7 +837,9 @@ function startDrive(i){const x=R[i];if(window.speechSynthesis)speechSynthesis.ca
   store.set('pend',{ts:Date.now(),h:new Date().getHours(),pred:x.dur/60,s:samples(x.g),len:x.g.pts[x.g.pts.length-1].d,label:x.label,tags:x.tags.join(', ')});renderPend();}
 $('#verdict').onclick=e=>{if(e.target.id==='vback'){e.preventDefault();sel=null;render();if(map)drawAll();return;}
   const n=e.target.closest('.nav');if(n)startDrive(+n.dataset.i);};
-$('#cards').onclick=e=>{
+function showHidden(){const cur=R[sel];R=R.concat(HIDDEN).sort((a,b)=>a.eff-b.eff);HIDDEN=[];
+  R.forEach((x,i)=>{x.label=String.fromCharCode(65+i);x.color=COLORS[i%COLORS.length];if(i>0&&!x.br)x.br=[];});sel=R.indexOf(cur);render();drawAll();}
+$('#cards').onclick=e=>{if(e.target.id==='showhidden'){showHidden();return;}
   const n=e.target.closest('.nav');
   if(n){startDrive(+n.dataset.i);return;}
   const t=e.target.closest('.dz,.all');if(!t)return;e.preventDefault();
