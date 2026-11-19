@@ -329,7 +329,7 @@ const XKEY=[[/^15 Temmuz/,'T15'],[/^FSM/,'FSM'],[/^Yavuz/,'YSS'],[/^Avrasya/,'AV
 function crossingOf(g){for(const t of S.tp){if(!t.gate)continue;const k=XKEY.find(([re])=>re.test(t.name));if(k&&crossIdx(g,t.gate)>=0)return k[1];}return 'NONE';}
 function colorize(list){const used={};list.forEach(x=>{const k=crossingOf(x.g),i=used[k]||0;used[k]=i+1;x.xing=k;const c=XPAL[k][i%XPAL[k].length];x.color=c[0];x.cname=c[1];});}
 // ücretin hemen yanında: haritadaki çizginin rengi (adıyla) ve hangi geçişten geçtiği
-function xTag(x){return x.xing?`<span class="tag" style="border:1px solid ${x.color};color:${x.color}"><b style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${x.color};vertical-align:-1px"></b> ${x.cname} · ${XNAME[x.xing]}</span>`:'';}
+function xTag(x){return x.xing?`<span class="tag" style="border:1px solid ${x.color};color:${x.color}"><b style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${x.color};vertical-align:-1px"></b> ${XNAME[x.xing]}</span>`:'';}
 function legendHtml(list){const ks=[...new Set(list.map(x=>x.xing).filter(Boolean))];
   return ks.map(k=>`<span style="white-space:nowrap"><span style="display:inline-block;width:14px;height:4px;border-radius:2px;background:${XPAL[k][0][0]};vertical-align:middle"></span> ${XNAME[k]}</span>`).join(' &nbsp; ');}
 function crossIdx(g,gate){const [ax,ay]=proj(gate[0],gate[1]),[bx,by]=proj(gate[2],gate[3]),P=g.pts,
