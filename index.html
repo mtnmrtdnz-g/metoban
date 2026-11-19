@@ -303,15 +303,20 @@ S.tp.forEach(t=>{if(/^(15 Temmuz|FSM)/.test(t.name)&&t.v!==2){if(t.dir===90)t.di
 S.tp.forEach(t=>{const m=GATES.find(([n])=>n.test(t.name));if(m){t.gate=m[1];t.r=m[2];}delete t.re;});
 // Rota renkleri boğaz geçişine göre sabit: 15 Temmuz mavi, FSM sarı, YSS mor, Avrasya yeşil.
 // Aynı geçişten birden fazla rota varsa o rengin tonları (ör. mavi → turkuaz → lacivert, sarı → turuncu → kehribar).
-const XPAL={T15:['#3b82f6','#22d3ee','#4f46e5','#93c5fd'],FSM:['#facc15','#fb923c','#f59e0b','#fde68a'],YSS:['#a855f7','#e879f9','#7c3aed','#c4b5fd'],
-  AVR:['#22c55e','#2dd4bf','#84cc16','#86efac'],OSM:['#ef4444','#fb7185','#f97316'],CNK:['#ec4899','#f9a8d4'],NONE:['#e5e7eb','#94a3b8','#cbd5e1','#f1f5f9']};
+const XPAL={T15:[['#3b82f6','mavi'],['#22d3ee','turkuaz'],['#4f46e5','lacivert'],['#93c5fd','açık mavi']],
+  FSM:[['#ffe600','sarı'],['#ff6a00','turuncu'],['#c08a00','hardal'],['#fff7ae','açık sarı']],
+  YSS:[['#a855f7','mor'],['#e879f9','pembe-mor'],['#7c3aed','koyu mor'],['#c4b5fd','lila']],
+  AVR:[['#22c55e','yeşil'],['#2dd4bf','yeşil-turkuaz'],['#84cc16','fıstık yeşili'],['#86efac','açık yeşil']],
+  OSM:[['#ef4444','kırmızı'],['#fb7185','pembe'],['#f97316','kiremit']],CNK:[['#ec4899','fuşya'],['#f9a8d4','açık pembe']],
+  NONE:[['#e5e7eb','beyaz'],['#94a3b8','gri'],['#cbd5e1','açık gri'],['#64748b','koyu gri']]};
 const XNAME={T15:'15 Temmuz (1. köprü)',FSM:'FSM (2. köprü)',YSS:'Yavuz Sultan Selim (3. köprü)',AVR:'Avrasya Tüneli',OSM:'Osmangazi',CNK:'1915 Çanakkale',NONE:'Boğaz geçişi yok'};
 const XKEY=[[/^15 Temmuz/,'T15'],[/^FSM/,'FSM'],[/^Yavuz/,'YSS'],[/^Avrasya/,'AVR'],[/^Osmangazi/,'OSM'],[/^1915/,'CNK']];
 function crossingOf(g){for(const t of S.tp){if(!t.gate)continue;const k=XKEY.find(([re])=>re.test(t.name));if(k&&crossIdx(g,t.gate)>=0)return k[1];}return 'NONE';}
-function colorize(list){const used={};list.forEach(x=>{const k=crossingOf(x.g),i=used[k]||0;used[k]=i+1;x.xing=k;x.color=XPAL[k][i%XPAL[k].length];});}
-function xTag(x){return x.xing?`<span class="tag" style="border:1px solid ${x.color};color:${x.color}">${XNAME[x.xing]}</span>`:'';}
+function colorize(list){const used={};list.forEach(x=>{const k=crossingOf(x.g),i=used[k]||0;used[k]=i+1;x.xing=k;const c=XPAL[k][i%XPAL[k].length];x.color=c[0];x.cname=c[1];});}
+// ücretin hemen yanında: haritadaki çizginin rengi (adıyla) ve hangi geçişten geçtiği
+function xTag(x){return x.xing?`<span class="tag" style="border:1px solid ${x.color};color:${x.color}"><b style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${x.color};vertical-align:-1px"></b> ${x.cname} · ${XNAME[x.xing]}</span>`:'';}
 function legendHtml(list){const ks=[...new Set(list.map(x=>x.xing).filter(Boolean))];
-  return ks.map(k=>`<span style="white-space:nowrap"><span style="display:inline-block;width:14px;height:4px;border-radius:2px;background:${XPAL[k][0]};vertical-align:middle"></span> ${XNAME[k]}</span>`).join(' &nbsp; ');}
+  return ks.map(k=>`<span style="white-space:nowrap"><span style="display:inline-block;width:14px;height:4px;border-radius:2px;background:${XPAL[k][0][0]};vertical-align:middle"></span> ${XNAME[k]}</span>`).join(' &nbsp; ');}
 function crossIdx(g,gate){const [ax,ay]=proj(gate[0],gate[1]),[bx,by]=proj(gate[2],gate[3]),P=g.pts,
     side=(px,py,qx,qy,rx,ry)=>(qx-px)*(ry-py)-(qy-py)*(rx-px);
   for(let i=0;i<P.length-1;i++){const p=P[i],q=P[i+1];
@@ -855,7 +860,7 @@ function render(){$('#glegend').innerHTML=legendHtml(R);
       <b style="color:${x.color}">${x.label} kolu:</b> ${fmtKm(b.bi.len)}, ~${fmtMin(b.bi.t)} ${esc(b.bi.ins.join(' → '))}<br>
       <span class="sub">Trafiksiz fark: ${((b.bi.t-b.ai.t)/60>=0?'+':'')}${((b.bi.t-b.ai.t)/60).toFixed(1)} dk, ${((b.bi.len-b.ai.len)/1000>=0?'+':'')}${((b.bi.len-b.ai.len)/1000).toFixed(1)} km</span></div>`).join('');
     return `<div class="card ${x===rec?'rec':''}" id="card${i}" style="--c:${x.color}">
-      <div class="h"><span class="lbl">${x.label}</span><span class="big">${fmtMin(x.eff)}</span><span>${fmtKm(x.dist)}</span>${tollTag}${x.windy?'<span class="tag bad">dolambaçlı</span>':''}${x===rec?'<span class="tag ok">önerilen</span>':''}${i===0?'<span class="tag">en hızlı</span>':''}${xTag(x)}</div>
+      <div class="h"><span class="lbl">${x.label}</span><span class="big">${fmtMin(x.eff)}</span><span>${fmtKm(x.dist)}</span>${tollTag}${xTag(x)}${x.windy?'<span class="tag bad">dolambaçlı</span>':''}${x===rec?'<span class="tag ok">önerilen</span>':''}${i===0?'<span class="tag">en hızlı</span>':''}</div>
       ${cmp1?`<div class="sub" style="font-size:15px;color:var(--tx)">${esc(cmp1)}</div>`:''}
       <details><summary>Hesap ve ayrıntılar</summary>
       <div class="sub">Kaynak: ${esc(x.tags.join(', '))}${i>0?' · '+x.br.length+' ayrışma':''}</div>

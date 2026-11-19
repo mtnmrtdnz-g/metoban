@@ -174,7 +174,7 @@ function renderCards0(info,fresh){const p=pv(),A=PR[0];
     const gl=!fresh?'Google karşılaştırması için bu adresi Google sekmesinde de arat.':
       tw.off<500?`Google'da da var: ${HIDDEN.includes(tw.y)?'gizlenen rotalardan biri':`<b style="color:${tw.y.color}">${tw.y.label}</b> rotası`}, Google ${Math.round(tw.y.eff/60)} dk · ${esc(p.name)} ${Math.round(x.dur/60)} dk (fark ${Math.round((x.dur-tw.y.eff)/60)>=0?'+':''}${Math.round((x.dur-tw.y.eff)/60)} dk)`:
       `Google'ın listesinde yok (${(tw.own/1000).toFixed(1)} km'si Google'ın en yakın rotasından farklı)`;
-    return `<div class="card" style="--c:${x.color}"><div class="h"><span class="lbl">${x.label}</span><span class="big">${(x.dur/60).toFixed(0)} dk</span><span>${fmtKm(x.dist)}</span>${toll}${i===0?'<span class="tag">en hızlı</span>':''}${xTag(x)}</div>
+    return `<div class="card" style="--c:${x.color}"><div class="h"><span class="lbl">${x.label}</span><span class="big">${(x.dur/60).toFixed(0)} dk</span><span>${fmtKm(x.dist)}</span>${toll}${xTag(x)}${i===0?'<span class="tag">en hızlı</span>':''}</div>
       ${i>0?`<div class="sub" style="font-size:15px;color:var(--tx)">A'ya göre +${((x.dur-A.dur)/60).toFixed(1)} dk, ${((x.dist-A.dist)/1000>=0?'+':'')}${((x.dist-A.dist)/1000).toFixed(1)} km</div>`:''}
       ${x.delay!=null?`<div class="sub">Trafik gecikmesi: ${x.delay>=60?'+'+Math.round(x.delay/60)+' dk':'yok'}</div>`:'<div class="sub">Trafiksiz tahmin</div>'}
       <div class="sub">${gl}</div>
