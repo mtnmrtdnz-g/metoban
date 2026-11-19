@@ -277,17 +277,30 @@ function hwId(t,lat,lng){
   // Anadolu yakasında Kurtköy çevresi Kuzey Marmara Anadolu (Kurtköy–Akyazı) sistemine bağlıdır (ör. Kurtköy–Pendik bağlantısı).
   if(/Paralı yol|Toll road/i.test(t)&&!/\bO-?[12]\b|D\s?100|Avrasya|Köprü|Tünel/i.test(t))return (lat<41.0&&lng>29.15)?'kmoB':'x';
   return null;}
-function hwOf(r){const km={};let cur=null;
-  for(const leg of (r.legs||[]))for(const st of (leg.steps||[])){
-    const t=(st.navigationInstruction&&st.navigationInstruction.instructions)||'',d=st.distanceMeters||0,sec=dur(st.staticDuration);
-    const pl=decodePoly(st.polyline&&st.polyline.encodedPolyline||''),mid=pl.length?pl[Math.floor(pl.length/2)]:[0,0];
-    let id=hwId(t,mid[0],mid[1]);
-    if(!id&&cur){const other=/\b(O-?\d+|D\s?\d{3})\b|çıkış/i.test(t),fast=sec>0&&d/sec>22;   // 22 m/s ≈ 80 km/h
-      if(!other&&fast)id=hwId(cur==='o5'?'O-5':cur==='o4'?'O-4':cur==='o3'?'O-3':'O-7',mid[0],mid[1]);}
-    cur=id;if(id)km[id]=(km[id]||0)+d/1000;}
-  return km;}
-function hwToll(km){const parts=[];let sum=0;
-  for(const h of S.hw){const k=km[h.id];if(!k||k<0.5)continue;let v=Math.round(Math.min(h.max,Math.max(h.min,k*h.rate))),snap='';
+// Rotanın ücretli kesimlerini "biniş"lere ayırır: aynı sistemde kesintisiz giden adımlar tek biniş, arada ücretsiz yol varsa
+// yeni biniş (çıkıp yeniden girmek ayrıca ücretlenir). Adı/kodu olmayan kısa "Paralı yol" rampaları (giriş/çıkış kolları)
+// komşu adımın sistemine katılır; böylece TEM rampası Kuzey Marmara sayılmaz.
+function hwOf(r){const st=[];
+  for(const leg of (r.legs||[]))for(const s of (leg.steps||[])){
+    const t=(s.navigationInstruction&&s.navigationInstruction.instructions)||'',d=s.distanceMeters||0,sec=dur(s.staticDuration);
+    const pl=decodePoly(s.polyline&&s.polyline.encodedPolyline||''),mid=pl.length?pl[Math.floor(pl.length/2)]:[0,0];
+    const named=hwId(t.replace(/Paralı yol|Toll road/gi,''),mid[0],mid[1]);
+    st.push({t,d,sec,mid,id:named||hwId(t,mid[0],mid[1]),named:!!named,paid:/Paralı yol|Toll road/i.test(t)});}
+  // kodsuz hızlı devam adımları: önceki adımın sistemi sürer
+  for(let i=1;i<st.length;i++){const s=st[i],p=st[i-1];
+    if(!s.id&&p.id&&p.named&&!/\b(O-?\d+|D\s?\d{3})\b|çıkış/i.test(s.t)&&s.sec>0&&s.d/s.sec>22){s.id=p.id;s.named=true;}}
+  // kodsuz kısa paralı rampalar: komşu adlı sisteme katıl
+  for(let i=0;i<st.length;i++){const s=st[i];if(s.named||!s.id||s.d>=1500)continue;
+    const n=st.slice(i+1).find(q=>q.id),pv=st.slice(0,i).reverse().find(q=>q.id);
+    const pick=(n&&n.named&&n.id)||(pv&&pv.named&&pv.id);if(pick){s.id=pick;s.named=true;}}
+  const runs=[];let cur=null;
+  for(const s of st){if(!s.id){cur=null;continue;}
+    if(cur&&cur.id===s.id)cur.km+=s.d/1000;else{cur={id:s.id,km:s.d/1000};runs.push(cur);}}
+  return runs;}
+function hwToll(runs){const parts=[];let sum=0;
+  if(!Array.isArray(runs))runs=Object.entries(runs||{}).map(([id,km])=>({id,km}));
+  for(const r of runs){const h=S.hw.find(q=>q.id===r.id),k=r.km;if(!h||k<0.3)continue;
+    let v=Math.round(Math.min(h.max,Math.max(h.min,k*h.rate))),snap='';
     if(h.steps&&k>=5){const s=h.steps.find(q=>q>=0.93*k*h.rate);if(s){v=s;snap='tarife basamağı';}}
     parts.push({name:h.name,km:k,rate:h.rate,v,cl:snap||(k*h.rate<h.min?'en az ücret':k*h.rate>h.max?'en çok':'')});sum+=v;}
   return {sum,parts};}
