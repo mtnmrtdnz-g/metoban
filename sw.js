@@ -1,5 +1,5 @@
 // Sadece uygulama dosyalarını önbelleğe alır; Google API isteklerine dokunmaz (her zaman ağdan gider).
-const C='metoban-v29',FILES=['./','./index.html','./providers.js','./manifest.webmanifest','./icon-192.png','./icon-512.png','./icon-maskable-512.png','./mark.svg'];
+const C='metoban-v30',FILES=['./','./index.html','./providers.js','./manifest.webmanifest','./icon-192.png','./icon-512.png','./icon-maskable-512.png','./mark.svg'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>c.addAll(FILES)));self.skipWaiting();});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k)))));self.clients.claim();});
 self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(u.origin!==location.origin)return;
